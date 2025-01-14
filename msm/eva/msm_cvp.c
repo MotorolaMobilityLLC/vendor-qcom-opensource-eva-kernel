@@ -1324,6 +1324,9 @@ stop_thread:
 exit:
 	cvp_put_inst(s);
 	CVPKERNEL_ATRACE_END("msm_cvp_session_stop");
+	pr_info_ratelimited(CVP_PID_TAG "Stop session done for session_id = %#x\n",
+			current->pid, current->tgid, "sess",
+			hash32_ptr(inst->session));
 	return rc;
 }
 
@@ -1397,6 +1400,10 @@ static int msm_cvp_get_sysprop(struct msm_cvp_inst *inst,
 	struct iris_hfi_device *hfi;
 	struct cvp_session_prop *session_prop;
 	int i, rc = 0;
+#ifdef CVP_SW_DBG_BUF_ENABLED
+	int inst_idx = 0;
+	struct msm_cvp_inst *curr_inst = NULL;
+#endif
 
 	if (!inst || !inst->core || !inst->core->dev_ops) {
 		dprintk(CVP_ERR, "%s: invalid params\n", __func__);
@@ -1447,6 +1454,37 @@ static int msm_cvp_get_sysprop(struct msm_cvp_inst *inst,
 			rc = 0;
 			break;
 		}
+#ifdef CVP_SW_DBG_BUF_ENABLED
+		case EVA_KMD_PROP_SW_DBG_BUF:
+		{
+			get_dma_buf(hfi->sw_dbg_buf.mem_data.dma_buf);
+			rc = dma_buf_fd(hfi->sw_dbg_buf.mem_data.dma_buf, O_RDWR | O_CLOEXEC);
+			if (rc < 0) {
+				dprintk(CVP_WARN, "Failed get sw_dbg_buf dma_buf fd %d\n", rc);
+				dma_buf_put(hfi->sw_dbg_buf.mem_data.dma_buf);
+				break;
+			}
+
+			props->prop_data[i].data = rc;
+
+			rc = 0;
+			break;
+		}
+		case EVA_KMD_PROP_SW_DBG_BUF_IDX:
+		{
+			list_for_each_entry(curr_inst, &inst->core->instances, list) {
+				if (curr_inst != NULL) {
+					if (inst == curr_inst) {
+						props->prop_data[i].data = inst_idx;
+						break;
+					}
+					inst_idx++;
+				}
+			}
+
+			break;
+		}
+#endif
 		case EVA_KMD_PROP_SESSION_STATE:
 		{
 			props->prop_data[i].data = inst->session_error_code;

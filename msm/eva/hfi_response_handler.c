@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -520,10 +520,15 @@ static int hfi_process_session_dump_notify(u32 device_id,
 	if (!pkt) {
 		dprintk(CVP_ERR, "%s: invalid param\n", __func__);
 		return -EINVAL;
-	} else if (pkt->header.size > sizeof(struct cvp_hfi_dumpmsg_session_hdr)) {
-		dprintk(CVP_ERR, "%s: bad_pkt_size %d\n", __func__, pkt->header.size);
-		return -E2BIG;
+	} else if (pkt->header.size != sizeof(struct cvp_hfi_dumpmsg_session_hdr)) {
+		dprintk(CVP_ERR, "%s: bad_pkt_size %d, expected pkt_size %d\n",
+			__func__, pkt->header.size, sizeof(struct cvp_hfi_dumpmsg_session_hdr));
+		if (pkt->header.size > sizeof(struct cvp_hfi_dumpmsg_session_hdr))
+			return -E2BIG;
+		else
+			return -EINVAL;
 	}
+
 	session_id = get_msg_session_id(pkt);
 	core = cvp_driver->cvp_core;
 	inst = cvp_get_inst_from_id(core, session_id);
@@ -570,7 +575,12 @@ static int hfi_process_session_cvp_msg(u32 device_id,
 	} else if (pkt->header.size > MAX_HFI_PKT_SIZE * sizeof(unsigned int)) {
 		dprintk(CVP_ERR, "%s: bad_pkt_size %d\n", __func__, pkt->header.size);
 		return -E2BIG;
+	} else if (pkt->header.size < get_msg_size(pkt)) {
+		dprintk(CVP_ERR, "%s: bad_pkt_size %d, expected pkt size %d\n",
+			__func__, pkt->header.size, get_msg_size(pkt));
+		return -EINVAL;
 	}
+
 	session_id = get_msg_session_id(pkt);
 	core = cvp_driver->cvp_core;
 	inst = cvp_get_inst_from_id(core, session_id);
@@ -611,8 +621,9 @@ static int hfi_process_session_cvp_msg(u32 device_id,
 	spin_unlock(&sq->lock);
 
 	if (get_msg_errorcode(pkt) == HFI_ERR_SESSION_HW_HANG_DETECTED) {
-		dprintk(CVP_ERR, "%s Hardware Hang Observed:\n");
+		dprintk(CVP_ERR, "%s Hardware Hang Observed:\n", __func__);
 		cvp_clock_reg_print(dev);
+		BUG_ON(!msm_cvp_session_error_recovery);
 	}
 
 	wake_up_all(&sq->wq);

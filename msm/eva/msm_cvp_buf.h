@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_CVP_BUF_H_
@@ -16,7 +16,7 @@
 #include "cvp_comm_def.h"
 
 #define MAX_FRAME_BUFFER_NUMS 40
-#define MAX_DMABUF_NUMS 64
+#define MAX_DMABUF_NUMS 256
 #define IS_CVP_BUF_VALID(buf, smem) \
 	((buf->size <= smem->size) && \
 	(buf->size <= smem->size - buf->offset))
@@ -24,6 +24,7 @@
 struct msm_cvp_inst;
 struct msm_cvp_platform_resources;
 struct msm_cvp_list;
+struct cvp_dsp_fastrpc_driver_entry;
 
 enum smem_cache_ops {
 	SMEM_CACHE_CLEAN,
@@ -77,6 +78,7 @@ struct cvp_dma_buf_vmap {
 };
 
 struct msm_cvp_smem {
+	struct rb_node node;
 	struct list_head list;
 	atomic_t refcount;
 	struct dma_buf *dma_buf;
@@ -84,7 +86,7 @@ struct msm_cvp_smem {
 	u32 device_addr;
 	dma_addr_t dma_handle;
 	u32 size;
-	u32 bitmap_index;
+	bool cached;
 	u32 flags;
 	u32 pkt_type;
 	u32 buf_idx;
@@ -99,23 +101,22 @@ struct msm_cvp_wncc_buffer {
 };
 
 struct cvp_dmamap_cache {
-	unsigned long usage_bitmap;
 	struct mutex lock;
-	struct msm_cvp_smem *entries[MAX_DMABUF_NUMS];
+	struct rb_root rbtree;
 	unsigned int nr;
 };
 
 static inline void INIT_DMAMAP_CACHE(struct cvp_dmamap_cache *cache)
 {
 	mutex_init(&cache->lock);
-	cache->usage_bitmap = 0;
+	cache->rbtree = RB_ROOT;
 	cache->nr = 0;
 }
 
 static inline void DEINIT_DMAMAP_CACHE(struct cvp_dmamap_cache *cache)
 {
 	mutex_destroy(&cache->lock);
-	cache->usage_bitmap = 0;
+	cache->rbtree = RB_ROOT;
 	cache->nr = 0;
 }
 
@@ -186,7 +187,7 @@ int print_smem(u32 tag, const char *str,
 
 /*Kernel DMA buffer and IOMMU mapping functions*/
 int msm_cvp_smem_alloc(size_t size, u32 align, int map_kernel,
-			void  *res, struct msm_cvp_smem *smem);
+			void  *res, struct msm_cvp_smem *smem, int user_access);
 int msm_cvp_smem_free(struct msm_cvp_smem *smem);
 struct context_bank_info *msm_cvp_smem_get_context_bank(
 				struct msm_cvp_platform_resources *res,
@@ -195,6 +196,9 @@ int msm_cvp_map_smem(struct msm_cvp_inst *inst,
 			struct msm_cvp_smem *smem,
 			const char *str);
 int msm_cvp_unmap_smem(struct msm_cvp_inst *inst,
+			struct msm_cvp_smem *smem,
+			const char *str);
+int msm_cvp_unmap_smem_frpc(struct cvp_dsp_fastrpc_driver_entry *frpc_node,
 			struct msm_cvp_smem *smem,
 			const char *str);
 struct dma_buf *msm_cvp_smem_get_dma_buf(int fd);
@@ -242,14 +246,19 @@ int msm_cvp_register_buffer(struct msm_cvp_inst *inst,
 		struct eva_kmd_buffer *buf);
 int msm_cvp_unregister_buffer(struct msm_cvp_inst *inst,
 		struct eva_kmd_buffer *buf);
+int msm_cvp_register_dsp_buffer(struct msm_cvp_inst *inst,
+		struct cvp_dsp_fastrpc_driver_entry *frpc_node,
+		struct eva_kmd_buffer *buf);
+int msm_cvp_unregister_dsp_buffer(struct msm_cvp_inst *inst,
+		struct cvp_dsp_fastrpc_driver_entry *frpc_node,
+		struct eva_kmd_buffer *buf);
 int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst);
 void msm_cvp_print_inst_bufs(struct msm_cvp_inst *inst, bool log);
-int cvp_allocate_dsp_bufs(struct msm_cvp_inst *inst,
-			struct cvp_internal_buf *buf,
+void msm_cvp_print_frpc_bufs(struct cvp_dsp_fastrpc_driver_entry *frpc_node, u32 tag, bool raw);
+int cvp_allocate_dsp_bufs(struct cvp_internal_buf *buf,
 			u32 buffer_size,
 			u32 secure_type);
-int cvp_release_dsp_buffers(struct msm_cvp_inst *inst,
-			struct cvp_internal_buf *buf);
+int cvp_release_dsp_buffers(struct cvp_internal_buf *buf);
 void cvp_buf_map_set_vaddr(struct cvp_dma_buf_vmap *vmap, void *vaddr);
 int msm_cvp_dma_buf_vmap(struct dma_buf *dmabuf, struct cvp_dma_buf_vmap *vmap);
 void msm_cvp_dma_buf_vunmap(struct dma_buf *dmabuf, struct cvp_dma_buf_vmap *vmap);

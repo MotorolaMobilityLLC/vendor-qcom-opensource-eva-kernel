@@ -25,6 +25,7 @@
 #include <media/msm_eva_private.h>
 #include "cvp_hfi_api.h"
 #include "cvp_hfi_helper.h"
+#include "msm_cvp_sw_dbg.h"
 
 #define MAX_SUPPORTED_INSTANCES 16
 #define MAX_CV_INSTANCES MAX_SUPPORTED_INSTANCES
@@ -54,6 +55,7 @@
 #define MAX_CVP_ERROR_COUNT 65535
 
 struct msm_cvp_inst;
+struct cvp_dsp_fastrpc_driver_entry;
 
 enum cvp_core_state {
 	CVP_CORE_UNINIT = 0,
@@ -270,70 +272,6 @@ struct cvp_session_event {
 	wait_queue_head_t wq;
 };
 
-#define MAX_ENTRIES 64
-
-struct smem_data {
-	u32 size;
-	u32 flags;
-	u32 device_addr;
-	u32 bitmap_index;
-	u32 refcount;
-	u32 pkt_type;
-	u32 buf_idx;
-};
-
-struct cvp_buf_data {
-	u32 device_addr;
-	u32 size;
-};
-
-struct inst_snapshot {
-	void *session;
-	u32 smem_index;
-	u32 dsp_index;
-	u32 persist_index;
-	struct smem_data smem_log[MAX_ENTRIES];
-	struct cvp_buf_data dsp_buf_log[MAX_ENTRIES];
-	struct cvp_buf_data persist_buf_log[MAX_ENTRIES];
-};
-
-struct cvp_noc_log {
-	u32 used;
-	u32 err_ctrl_swid_low;
-	u32 err_ctrl_swid_high;
-	u32 err_ctrl_mainctl_low;
-	u32 err_ctrl_errvld_low;
-	u32 err_ctrl_errclr_low;
-	u32 err_ctrl_errlog0_low;
-	u32 err_ctrl_errlog0_high;
-	u32 err_ctrl_errlog1_low;
-	u32 err_ctrl_errlog1_high;
-	u32 err_ctrl_errlog2_low;
-	u32 err_ctrl_errlog2_high;
-	u32 err_ctrl_errlog3_low;
-	u32 err_ctrl_errlog3_high;
-	u32 err_core_swid_low;
-	u32 err_core_swid_high;
-	u32 err_core_mainctl_low;
-	u32 err_core_errvld_low;
-	u32 err_core_errclr_low;
-	u32 err_core_errlog0_low;
-	u32 err_core_errlog0_high;
-	u32 err_core_errlog1_low;
-	u32 err_core_errlog1_high;
-	u32 err_core_errlog2_low;
-	u32 err_core_errlog2_high;
-	u32 err_core_errlog3_low;
-	u32 err_core_errlog3_high;
-	u32 arp_test_bus[16];
-	u32 dma_test_bus[512];
-};
-
-struct cvp_debug_log {
-	struct cvp_noc_log noc_log;
-	u32 snapshot_index;
-	struct inst_snapshot snapshot[16];
-};
 
 struct msm_cvp_core {
 	struct mutex lock;
@@ -365,7 +303,8 @@ struct msm_cvp_core {
 	unsigned long orig_core_sum;
 	unsigned long bw_sum;
 	atomic64_t kernel_trans_id;
-	struct cvp_debug_log log;
+	struct eva_kmd_debug kmd_dbg;
+	struct eva_kmd_trace kmd_trace;
 };
 
 struct msm_cvp_inst {
@@ -374,6 +313,7 @@ struct msm_cvp_inst {
 	struct mutex sync_lock, lock;
 	struct msm_cvp_core *core;
 	enum session_type session_type;
+	struct cvp_dsp_fastrpc_driver_entry *fastrpc_entry;
 	u32 dsp_handle;
 	struct task_struct *task;
 	atomic_t smem_count;
@@ -385,11 +325,9 @@ struct msm_cvp_inst {
 	struct msm_cvp_list freqs;
 	struct msm_cvp_list persistbufs;
 	struct cvp_dmamap_cache dma_cache;
-	struct msm_cvp_list cvpdspbufs;
 	struct msm_cvp_list cvpwnccbufs;
 	struct msm_cvp_list frames;
 	struct cvp_frame_bufs last_frame;
-	struct cvp_frame_bufs unused_dsp_bufs;
 	struct cvp_frame_bufs unused_wncc_bufs;
 	u32 cvpwnccbufs_num;
 	struct msm_cvp_wncc_buffer* cvpwnccbufs_table;
