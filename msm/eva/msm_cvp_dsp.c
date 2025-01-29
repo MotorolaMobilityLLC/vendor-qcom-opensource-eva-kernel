@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/rpmsg.h>
@@ -1303,6 +1303,8 @@ static void eva_fastrpc_driver_unregister(uint32_t handle, bool force_exit)
 		mutex_unlock(&me->driver_name_lock);
 		kfree(frpc_node);
 	} else {
+		dprintk(CVP_WARN, "%s Fastrpc driver hdl %#x hdl %#x, f %d, session count is %d, abort unregistration\n",
+						__func__, handle, dsp2cpu_cmd->pid, (uint32_t)force_exit, frpc_node->session_cnt);
 		cvp_put_fastrpc_node(frpc_node);
 	}
 }
@@ -1788,6 +1790,7 @@ void __dsp_cvp_buf_register(struct cvp_dsp_cmd_msg *cmd)
 	if (!kmd) {
 		dprintk(CVP_ERR, "%s kzalloc failure\n", __func__);
 		cmd->ret = -1;
+		cvp_put_fastrpc_node(frpc_node);
 		return;
 	}
 
@@ -1819,6 +1822,7 @@ void __dsp_cvp_buf_register(struct cvp_dsp_cmd_msg *cmd)
 	dprintk(CVP_DSP, "%s: fd %d, iova 0x%x\n", __func__,
 			cmd->sbuf.fd, cmd->sbuf.iova);
 dsp_fail_buf_reg:
+	cvp_put_fastrpc_node(frpc_node);
 	kfree(kmd);
 }
 
@@ -1861,6 +1865,7 @@ void __dsp_cvp_buf_deregister(struct cvp_dsp_cmd_msg *cmd)
 	if (!kmd) {
 		dprintk(CVP_ERR, "%s kzalloc failure\n", __func__);
 		cmd->ret = -1;
+		cvp_put_fastrpc_node(frpc_node);
 		return;
 	}
 
@@ -1887,6 +1892,7 @@ void __dsp_cvp_buf_deregister(struct cvp_dsp_cmd_msg *cmd)
 
 	dprintk(CVP_DSP, "%s deregister buffer done\n", __func__);
 fail_dsp_buf_dereg:
+	cvp_put_fastrpc_node(frpc_node);
 	kfree(kmd);
 }
 
@@ -2283,20 +2289,24 @@ static bool __is_buf_valid(struct msm_cvp_inst *inst,
 static struct file *msm_cvp_fget(unsigned int fd, struct task_struct *task,
 			fmode_t mask, unsigned int refs)
 {
-	struct files_struct *files = task->files;
 	struct file *file;
+
+#if (KERNEL_VERSION(5, 13, 0) > LINUX_VERSION_CODE)
+	struct files_struct *files = task->files;
 
 	if (!files)
 		return NULL;
 
 	rcu_read_lock();
-
-#if (KERNEL_VERSION(5, 13, 0) > LINUX_VERSION_CODE)
 	file = fcheck_files(files, fd);
-#else
-	file = lookup_fdget_rcu(fd);
-#endif
 	rcu_read_unlock();
+#else
+	unsigned int ret_fd = fd;
+	file = task_lookup_next_fdget_rcu(task, &ret_fd);
+	if (ret_fd != fd)
+		dprintk(CVP_ERR, "%s FAILED to get file from fd = %u, %u\n",
+			__func__, fd, ret_fd);
+#endif
 
 	return file;
 }
@@ -2322,9 +2332,6 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst,
 	struct file *file;
 	struct cvp_dsp_fastrpc_driver_entry *frpc_node = NULL;
 
-	if (!__is_buf_valid(inst, buf, frpc_node))
-		return -EINVAL;
-
 	if (!inst->task)
 		return -EINVAL;
 
@@ -2333,6 +2340,9 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst,
 		dprintk(CVP_ERR, "%s: invalid frpc node\n", __func__);
 		return -EINVAL;
 	}
+
+	if (!__is_buf_valid(inst, buf, frpc_node))
+		return -EINVAL;
 
 	file = msm_cvp_fget(buf->fd, inst->task, FMODE_PATH, 1);
 	if (file == NULL) {
@@ -2398,6 +2408,7 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst,
 	list_add_tail(&cbuf->list, &frpc_node->cvpdspbufs.list);
 	mutex_unlock(&frpc_node->cvpdspbufs.lock);
 
+	fput(file);
 	return rc;
 
 exit:
