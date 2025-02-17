@@ -115,7 +115,7 @@ extern int msm_cvp_sw_dbg_buf_dump;
 
 #define MSM_CVP_ERROR(value)					\
 	do {	if (value)					\
-			dprintk(CVP_ERR, "WarnOn");		\
+			dprintk(CVP_ERR, "BugOn");		\
 		WARN_ON(value);					\
 	} while (0)
 
