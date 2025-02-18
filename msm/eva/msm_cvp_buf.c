@@ -1367,10 +1367,13 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 			smem->bitmap_index = i;
 			SET_USE_BITMAP(i, inst);
 		} else {
-			dprintk(CVP_WARN,
-			"%s: reached limit, fallback to buf mapping list\n"
-			, __func__);
 			atomic_inc(&smem->refcount);
+			dprintk(CVP_WARN,
+				"%s: reached limit, fallback to buf mapping list\n"
+				, __func__);
+			dprintk(CVP_WARN,
+				"%s: fd %d, dma_buf %#llx, smem->refcount %d\n"
+				, __func__, smem->fd, smem->dma_buf, atomic_read(&smem->refcount));
 			mutex_unlock(&inst->dma_cache.lock);
 			return -ENOMEM;
 		}
@@ -1378,7 +1381,9 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 
 	atomic_inc(&smem->refcount);
 	mutex_unlock(&inst->dma_cache.lock);
-	dprintk(CVP_MEM, "Add entry %d into cache\n", i);
+	dprintk(CVP_MEM, "%s: Added entry %d into cache\n", __func__, i);
+	dprintk(CVP_MEM, "%s: fd %d, dma_buf %#llx, smem->refcount %d\n",
+		__func__, smem->fd, smem->dma_buf, atomic_read(&smem->refcount));
 
 	return 0;
 }
@@ -1460,7 +1465,7 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 			__func__, buf->offset, buf->size);
 		if (found) {
 			mutex_lock(&inst->dma_cache.lock);
-			atomic_dec(&smem->refcount);
+			atomic_dec(&smem->refcount); // Should we put dma_buf as well?
 			mutex_unlock(&inst->dma_cache.lock);
 			return NULL;
 		}
@@ -1500,11 +1505,6 @@ static int msm_cvp_unmap_user_persist_buf(struct msm_cvp_inst *inst,
 	mutex_lock(&inst->persistbufs.lock);
 	mutex_lock(&inst->dma_cache.lock);
 	list_for_each_safe(ptr, next, &inst->persistbufs.list) {
-		if (!ptr) {
-			mutex_unlock(&inst->dma_cache.lock);
-			mutex_unlock(&inst->persistbufs.lock);
-			return -EINVAL;
-		}
 		pbuf = list_entry(ptr, struct cvp_internal_buf, list);
 		smem = pbuf->smem;
 		if (dma_buf == smem->dma_buf && (smem->flags & SMEM_PERSIST)) {
@@ -1514,20 +1514,23 @@ static int msm_cvp_unmap_user_persist_buf(struct msm_cvp_inst *inst,
 					"Unmap persist fd %d, dma_buf %#llx iova %#x\n",
 					pbuf->fd, smem->dma_buf, *iova);
 				list_del(&pbuf->list);
-				if (*iova) {
-					msm_cvp_unmap_smem(inst, smem, "unmap user persist");
-					msm_cvp_smem_put_dma_buf(smem->dma_buf);
-					smem->device_addr = 0;
-				}
-				/* Remove from 64 bit cache entry for DMM & WARP_DS PARAMS */
+
+				/*
+				 * Remove from 64 bit cache entry for DMM & WARP_DS PARAMS.
+				 * Only clear bit in bitmap and leave the unmap and put
+				 * dma to add_smem
+				 */
 				if (is_params_pkt(pkt_type) &&
 					(smem->bitmap_index < MAX_DMABUF_NUMS)) {
 					CLEAR_USE_BITMAP(smem->bitmap_index, inst);
 					print_smem(CVP_MEM, "Map dereference", inst, smem);
 					smem->buf_idx |= 0x10000000;
+				} else {
+					msm_cvp_unmap_smem(inst, smem, "unmap user persist");
+					msm_cvp_smem_put_dma_buf(smem->dma_buf);
+					cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
+					smem = NULL;
 				}
-				cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
-				smem = NULL;
 				cvp_kmem_cache_free(&cvp_driver->buf_cache, pbuf);
 				mutex_unlock(&inst->dma_cache.lock);
 				mutex_unlock(&inst->persistbufs.lock);
@@ -1818,14 +1821,14 @@ int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
 
 			return ret;
 		}
-		buf->fd = iova;
+		buf->fd = iova;  // Why do we need to do this? This is not needed
 	}
 	return 0;
 }
 
 int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 			struct eva_kmd_hfi_packet *in_pkt,
-			unsigned int offset, unsigned int buf_num)
+			unsigned int offset, unsigned int buf_num, uint32_t *fd_arr)
 {
 	struct cvp_buf_type *buf;
 	struct cvp_hfi_cmd_session_hdr *cmd_hdr;
@@ -1840,8 +1843,11 @@ int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 		buf = (struct cvp_buf_type *)&in_pkt->pkt_data[offset];
 		offset += sizeof(*buf) >> 2;
 
-		if (buf->fd < 0 || !buf->size)
+		if (buf->fd < 0 || !buf->size) {
+			dprintk(CVP_ERR, "%s: fd = %d, Size = %d, in_buf_num = %d\n",
+				__func__, buf->fd, buf->size, buf_num);
 			continue;
+		}
 
 		ret = msm_cvp_map_user_persist_buf(inst, buf,
 				cmd_hdr->packet_type, i, &iova);
@@ -1852,6 +1858,7 @@ int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 
 			return ret;
 		}
+		fd_arr[i] = buf->fd;
 		buf->fd = iova;
 	}
 	return 0;
@@ -1961,7 +1968,7 @@ int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst)
 		if (!smem) {
 			dprintk(CVP_ERR, "%s invalid persist smem\n", __func__);
 			mutex_unlock(&inst->persistbufs.lock);
-			return -EINVAL;
+			return -EINVAL; // Why to return? It should be continue.
 		}
 		if (cbuf->ownership != DRIVER) {
 			dprintk(CVP_MEM,
