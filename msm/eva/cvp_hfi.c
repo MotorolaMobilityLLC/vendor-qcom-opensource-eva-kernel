@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <asm/memory.h>
@@ -96,6 +96,7 @@ static int __release_subcaches(struct iris_hfi_device *device);
 static int __disable_subcaches(struct iris_hfi_device *device);
 static int __power_collapse(struct iris_hfi_device *device, bool force);
 static int iris_hfi_noc_error_info(void *dev);
+static void __deinit_resources(struct iris_hfi_device *device);
 
 static void interrupt_init_iris2(struct iris_hfi_device *device);
 static void setup_dsp_uc_memmap_vpu5(struct iris_hfi_device *device);
@@ -594,7 +595,7 @@ static int __read_queue(struct cvp_iface_q_info *qinfo, u8 *packet,
 	u32 *read_ptr;
 	u32 receive_request = 0;
 	u32 read_idx, write_idx;
-		int rc = 0;
+	int rc = 0;
 
 	if (!qinfo || !packet || !pb_tx_req_is_set) {
 		dprintk(CVP_ERR, "Invalid Params\n");
@@ -684,6 +685,12 @@ static int __read_queue(struct cvp_iface_q_info *qinfo, u8 *packet,
 					(u8 *)qinfo->q_array.align_virtual_addr,
 					new_read_idx << 2);
 		}
+		/*
+		 * Copy back the validated size to avoid security issue. As we are reading
+		 * the packet from a shared queue, there is a possibility to get the
+		 * packet->size data corrupted of shared queue by mallicious FW.
+		 */
+		*((u32 *) packet) = packet_size_in_words << 2;
 	} else {
 		dprintk(CVP_WARN,
 			"BAD packet received, read_idx: %#x, pkt_size: %d\n",
@@ -2280,23 +2287,18 @@ static int __sys_set_power_control(struct iris_hfi_device *device,
 
 static void cvp_pm_qos_update(struct iris_hfi_device *device, bool vote_on)
 {
-	u32 latency, off_vote_cnt;
+	u32 latency;
 	int i, err = 0;
 
-	spin_lock(&device->res->pm_qos.lock);
-	off_vote_cnt = device->res->pm_qos.off_vote_cnt;
-	spin_unlock(&device->res->pm_qos.lock);
-
-	if (vote_on && off_vote_cnt)
-		return;
-
-	latency = vote_on ? device->res->pm_qos.latency_us :
+	latency = vote_on ? device->global_pm_qos_latency_us :
 			PM_QOS_RESUME_LATENCY_DEFAULT_VALUE;
 
-	if (device->res->pm_qos.latency_us && device->res->pm_qos.pm_qos_hdls)
+	if (device->global_pm_qos_latency_us && device->res->pm_qos.pm_qos_hdls)
 		for (i = 0; i < device->res->pm_qos.silver_count; i++) {
 			if (!cpu_possible(device->res->pm_qos.silver_cores[i]))
 				continue;
+			dprintk(CVP_PWR, "%s, core %d, updating latency %d\n",
+				__func__, i, latency);
 			err = dev_pm_qos_update_request(
 				&device->res->pm_qos.pm_qos_hdls[i],
 				latency);
@@ -2311,9 +2313,14 @@ static void cvp_pm_qos_update(struct iris_hfi_device *device, bool vote_on)
 			}
 		}
 }
-static int iris_pm_qos_update(void *device)
+
+static int iris_pm_qos_aggregate(void *device)
 {
-	struct iris_hfi_device *dev;
+	struct iris_hfi_device *dev = NULL;
+	struct msm_cvp_core *core = NULL;
+	struct msm_cvp_inst *inst = NULL;
+	struct cvp_session_queue *sq = NULL;
+	u32 min_pm_qos_latency = PM_QOS_RESUME_LATENCY_DEFAULT_VALUE;
 
 	if (!device) {
 		dprintk(CVP_ERR, "%s Invalid device\n", __func__);
@@ -2321,10 +2328,34 @@ static int iris_pm_qos_update(void *device)
 	}
 
 	dev = device;
+	core = cvp_driver->cvp_core;
+	list_for_each_entry(inst, &core->instances, list) {
+		sq = &inst->session_queue;
+		spin_lock(&sq->lock);
+		/* Consider the latency for aggregation only if session is in start state */
+		if (sq->state == QUEUE_START)
+			min_pm_qos_latency = min_pm_qos_latency < inst->pm_qos_latency ?
+							min_pm_qos_latency:inst->pm_qos_latency;
+		spin_unlock(&sq->lock);
+	}
 
-	mutex_lock(&dev->lock);
-	cvp_pm_qos_update(dev, true);
-	mutex_unlock(&dev->lock);
+	if (min_pm_qos_latency != dev->global_pm_qos_latency_us) {
+		mutex_lock(&dev->lock);
+		dprintk(CVP_PWR, "%s New aggregated minmum latency %d\n",
+				__func__, min_pm_qos_latency);
+		/* Put a threshold on user latency so that user can only use the latency
+		 * to acheive power saving. Malicius user must not be allowed to keep the
+		 * apps core away from LPM.
+		 */
+		if (min_pm_qos_latency > core->resources.pm_qos.latency_us) {
+			dev->global_pm_qos_latency_us = min_pm_qos_latency;
+			cvp_pm_qos_update(dev, true);
+		} else {
+			dprintk(CVP_WARN, "%s New aggregated minmum latency is less than default"
+				"CVP latency (%d)\n", __func__, core->resources.pm_qos.latency_us);
+		}
+		mutex_unlock(&dev->lock);
+	}
 
 	return 0;
 }
@@ -2499,7 +2530,7 @@ static int iris_hfi_core_init(void *device)
 	if (rc) {
 		dprintk(CVP_ERR, "failed to init queues\n");
 		rc = -ENOMEM;
-		goto err_core_init;
+		goto err_init_queues;
 	}
 	cvp_register_va_md_region();
 
@@ -2558,7 +2589,7 @@ static int iris_hfi_core_init(void *device)
 	__set_ubwc_config(device);
 	__sys_set_idle_indicator(device, true);
 
-	if (dev->res->pm_qos.latency_us) {
+	if (dev->global_pm_qos_latency_us) {
 		int err = 0;
 		u32 i, cpu;
 
@@ -2576,11 +2607,13 @@ static int iris_hfi_core_init(void *device)
 			cpu = dev->res->pm_qos.silver_cores[i];
 			if (!cpu_possible(cpu))
 				continue;
+			dprintk(CVP_PWR, "%s, core %d, adding latency %d\n",
+				__func__, i, dev->global_pm_qos_latency_us);
 			err = dev_pm_qos_add_request(
 				get_cpu_device(cpu),
 				&dev->res->pm_qos.pm_qos_hdls[i],
 				DEV_PM_QOS_RESUME_LATENCY,
-				dev->res->pm_qos.latency_us);
+				dev->global_pm_qos_latency_us);
 			if (err < 0)
 				dprintk(CVP_WARN,
 					"%s pm_qos_add_req %d failed\n",
@@ -2598,6 +2631,10 @@ pm_qos_bail:
 
 	return 0;
 
+err_init_queues:
+	__interface_queues_release(dev);
+	power_off_iris2(dev);
+	__deinit_resources(dev);
 err_core_init:
 	__set_state(dev, IRIS_STATE_DEINIT);
 	__unload_fw(dev);
@@ -2629,7 +2666,7 @@ static int iris_hfi_core_release(void *dev)
 
 	mutex_lock(&device->lock);
 	dprintk(CVP_WARN, "Core releasing\n");
-	if (device->res->pm_qos.latency_us &&
+	if (device->global_pm_qos_latency_us &&
 		device->res->pm_qos.pm_qos_hdls) {
 		for (i = 0; i < device->res->pm_qos.silver_count; i++) {
 			if (!cpu_possible(device->res->pm_qos.silver_cores[i]))
@@ -4492,9 +4529,19 @@ static int __disable_gdsc(struct iris_hfi_device *device,
 			if (rc)
 				dprintk(CVP_ERR, "Failed to disable controller pd: %d\n", rc);
 		} else {
-			rc = __disable_power_domain(device, "core_pd");
-			if (rc)
-				dprintk(CVP_ERR, "Failed to disable core pd: %d\n", rc);
+			/* Take back the gdsc control to SW before disabling the GDSC.
+			 * Not doing so, would not remove the votes from mmcx rail and
+			 * may lead to power issues.
+			 */
+			rc = __disable_hw_power_collapse(device);
+			if (!rc) {
+				rc = __disable_power_domain(device, "core_pd");
+				if (rc)
+					dprintk(CVP_ERR, "Failed to disable core pd: %d\n", rc);
+			} else {
+				/* Bring attention to this issue */
+				msm_cvp_res_handle_fatal_hw_error(device->res, true);
+			}
 		}
 	} else {
 		if (!strcmp(name, "controller")) {
@@ -4912,7 +4959,7 @@ static inline int __suspend(struct iris_hfi_device *device)
 
 	power_off_iris2(device);
 
-	if (device->res->pm_qos.latency_us && device->res->pm_qos.pm_qos_hdls)
+	if (device->global_pm_qos_latency_us && device->res->pm_qos.pm_qos_hdls)
 		cvp_pm_qos_update(device, false);
 
 	return rc;
@@ -4991,7 +5038,7 @@ int __resume(struct iris_hfi_device *device)
 	 */
 	__set_threshold_registers(device);
 
-	if (device->res->pm_qos.latency_us && device->res->pm_qos.pm_qos_hdls)
+	if (device->global_pm_qos_latency_us && device->res->pm_qos.pm_qos_hdls)
 		cvp_pm_qos_update(device, true);
 
 	__sys_set_debug(device, msm_cvp_fw_debug);
@@ -5405,6 +5452,7 @@ static struct iris_hfi_device *__add_device(struct msm_cvp_platform_resources *r
 
 	hdevice->res = res;
 	hdevice->callback = callback;
+	hdevice->global_pm_qos_latency_us = PM_QOS_RESUME_LATENCY_DEFAULT_VALUE;
 
 	__init_cvp_ops(hdevice);
 
@@ -5639,14 +5687,6 @@ static int __power_on_core_v1(struct iris_hfi_device *device)
 		goto fail_enable_freerun;
 	}
 
-	__write_register(device, CVP_NOC_RCGCONTROLLER_HYSTERESIS_LOW, 0xff);
-	__write_register(device, CVP_NOC_RCGCONTROLLER_WAKEUP_LOW, 0x7);
-	__write_register(device, CVP_NOC_RCG_VNOC_NOC_CLK_FORCECLOCKON_LOW, 0x1);
-	__write_register(device, CVP_NOC_RCG_VNOC_NOC_CLK_ENABLE_LOW, 0x1);
-	usleep_range(5, 10);
-	__write_register(device, CVP_NOC_RCG_VNOC_NOC_CLK_FORCECLOCKON_LOW, 0x0);
-	__write_register(device, CVP_AON_WRAPPER_CVP_NOC_ARCG_CONTROL, 0x0);
-
 	dprintk(CVP_PWR, "EVA core powered on\n");
 	CVPKERNEL_ATRACE_END("__power_on_core_v1");
 
@@ -5780,8 +5820,6 @@ static int __power_off_core_v1(struct iris_hfi_device *device)
 	__write_register(device, CVP_WRAPPER_CORE_CLOCK_CONFIG, config);
 
 	/* HPG 3.4.4 step 6-7 */
-	__disable_hw_power_collapse(device);
-	usleep_range(100, 200);
 	__disable_gdsc(device, "core");
 	msm_cvp_disable_unprepare_clk(device, "core_clk");
 	return 0;
@@ -6028,6 +6066,14 @@ static int __set_registers_v1(struct iris_hfi_device *device)
 					reg_set->reg_tbl[i].value);
 	}
 
+	__write_register(device, CVP_NOC_RCGCONTROLLER_HYSTERESIS_LOW, 0xff);
+	__write_register(device, CVP_NOC_RCGCONTROLLER_WAKEUP_LOW, 0x7);
+	__write_register(device, CVP_NOC_RCG_VNOC_NOC_CLK_FORCECLOCKON_LOW, 0x1);
+	__write_register(device, CVP_NOC_RCG_VNOC_NOC_CLK_ENABLE_LOW, 0x1);
+	usleep_range(5, 10);
+	__write_register(device, CVP_NOC_RCG_VNOC_NOC_CLK_FORCECLOCKON_LOW, 0x0);
+	__write_register(device, CVP_AON_WRAPPER_CVP_NOC_ARCG_CONTROL, 0x0);
+
 	__write_register(device, CVP_CPU_CS_AXI4_QOS,
 				pdata->noc_qos->axi_qos);
 	__write_register(device, CVP_NOC_A_PRIORITYLUT_LOW,
@@ -6118,8 +6164,12 @@ static void __dump_noc_regs_v1(struct iris_hfi_device *device)
 	dprintk(CVP_ERR, "CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN0_LOW: 0x%x", val);
 	val = __read_register(device, CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN0_HIGH);
 	dprintk(CVP_ERR, "CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN0_HIGH: 0x%x", val);
+	val = __read_register(device, CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN1_LOW);
+	dprintk(CVP_ERR, "CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN1_LOW: 0x%x", val);
 	val = __read_register(device, CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN1_HIGH);
 	dprintk(CVP_ERR, "CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN1_HIGH: 0x%x", val);
+	val = __read_register(device, CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN2_LOW);
+	dprintk(CVP_ERR, "CVP_NOC_MAIN_SIDEBANDMANAGER_SENSELN2_LOW: 0x%x", val);
 
 	dprintk(CVP_ERR, "Dumping Core NoC registers\n");
 	val = __read_register(device, CVP_NOC_CORE_ERR_SWID_LOW_OFFS);
@@ -6194,7 +6244,7 @@ static void iris_init_hfi_callbacks(struct cvp_hfi_ops *ops_tbl)
 	ops_tbl->flush_debug_queue = iris_hfi_flush_debug_queue;
 	ops_tbl->noc_error_info = iris_hfi_noc_error_info;
 	ops_tbl->validate_session = iris_hfi_validate_session;
-	ops_tbl->pm_qos_update = iris_pm_qos_update;
+	ops_tbl->pm_qos_update = iris_pm_qos_aggregate;
 	ops_tbl->debug_hook = iris_debug_hook;
 }
 

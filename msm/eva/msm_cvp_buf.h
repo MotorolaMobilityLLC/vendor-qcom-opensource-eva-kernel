@@ -16,7 +16,7 @@
 #include "cvp_comm_def.h"
 
 #define MAX_FRAME_BUFFER_NUMS 40
-#define MAX_DMABUF_NUMS 256
+#define MAX_DMABUF_NUMS 64
 #define IS_CVP_BUF_VALID(buf, smem) \
 	((buf->size <= smem->size) && \
 	(buf->size <= smem->size - buf->offset))
@@ -41,6 +41,13 @@ enum smem_prop {
 	SMEM_PIXEL = 0x20,
 	SMEM_CAMERA = 0x40,
 	SMEM_PERSIST = 0x100,
+};
+
+enum cp_context_bank {
+	CP_CB_0 = 0,
+	CP_CB_3 = 3,
+	CP_CB_4 = 4,
+	CP_CB_7 = 7,
 };
 
 struct msm_cvp_list {
@@ -263,6 +270,7 @@ int cvp_release_dsp_buffers(struct cvp_internal_buf *buf);
 void cvp_buf_map_set_vaddr(struct cvp_dma_buf_vmap *vmap, void *vaddr);
 int msm_cvp_dma_buf_vmap(struct dma_buf *dmabuf, struct cvp_dma_buf_vmap *vmap);
 void msm_cvp_dma_buf_vunmap(struct dma_buf *dmabuf, struct cvp_dma_buf_vmap *vmap);
+enum cp_context_bank msm_cvp_get_cb(u32 flags);
 
 
 #endif
