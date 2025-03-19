@@ -2329,6 +2329,7 @@ static int iris_pm_qos_aggregate(void *device)
 
 	dev = device;
 	core = cvp_driver->cvp_core;
+	mutex_lock(&core->lock);
 	list_for_each_entry(inst, &core->instances, list) {
 		sq = &inst->session_queue;
 		spin_lock(&sq->lock);
@@ -2338,6 +2339,7 @@ static int iris_pm_qos_aggregate(void *device)
 							min_pm_qos_latency:inst->pm_qos_latency;
 		spin_unlock(&sq->lock);
 	}
+	mutex_unlock(&core->lock);
 
 	if (min_pm_qos_latency != dev->global_pm_qos_latency_us) {
 		mutex_lock(&dev->lock);
@@ -3453,17 +3455,19 @@ skip_power_off:
 static void __process_sys_error(struct iris_hfi_device *device)
 {
 	struct cvp_hfi_sfr_struct *vsfr = NULL;
+	u32 sfr_buf_size = 0;
 
 	vsfr = (struct cvp_hfi_sfr_struct *)device->sfr.align_virtual_addr;
-	if (vsfr) {
-		void *p = memchr(vsfr->rg_data, '\0', vsfr->bufSize);
+	sfr_buf_size = vsfr->bufSize;
+	if (vsfr && sfr_buf_size < ALIGNED_SFR_SIZE) {
+		void *p = memchr(vsfr->rg_data, '\0', sfr_buf_size);
 		/*
 		 * SFR isn't guaranteed to be NULL terminated
 		 * since SYS_ERROR indicates that Iris is in the
 		 * process of crashing.
 		 */
 		if (p == NULL)
-			vsfr->rg_data[vsfr->bufSize - 1] = '\0';
+			vsfr->rg_data[sfr_buf_size - 1] = '\0';
 
 #ifdef USE_PRESIL42
 		presil42_retrieve_sfr_buffer(device);
@@ -4663,11 +4667,30 @@ static int __set_subcaches(struct iris_hfi_device *device)
 	sc_res_info = (struct cvp_hfi_resource_syscache_info_type *)resource;
 	sc_res = &(sc_res_info->rg_subcache_entries[0]);
 
+	/* Mapping of cache slices as:
+	 * cvp slice (scid:8):    HFI_SYSCACHE_TARGET_FDU, HFI_SYSCACHE_TARGET_MPU
+	 * cvpfw slice (scid:19): HFI_SYSCACHE_TARGET_EVA_CPU
+	 */
 	iris_hfi_for_each_subcache(device, sinfo) {
 		if (sinfo->isactive) {
-			sc_res[c].size = sinfo->subcache->slice_size;
-			sc_res[c].sc_id = sinfo->subcache->slice_id;
-			c++;
+			if (!strcmp("cvp", sinfo->name)) {
+				sc_res[c].target_hw = HFI_SYSCACHE_TARGET_FDU;
+				sc_res[c].sc_id = sinfo->subcache->slice_id;
+				c++;
+
+				/* Will enable MPU once DV team confirms that
+				 * same slice id can be shared
+				 * sc_res[c].target_hw = HFI_SYSCACHE_TARGET_MPU;
+				 * sc_res[c].sc_id = sinfo->subcache->slice_id;
+				 * c++;
+				 */
+			} else if (!strcmp("cvpfw", sinfo->name)) {
+				sc_res[c].target_hw = HFI_SYSCACHE_TARGET_EVA_CPU;
+				sc_res[c].sc_id = sinfo->subcache->slice_id;
+				c++;
+			} else {
+				dprintk(CVP_ERR, "Invalid subcache %s\n", sinfo->name);
+			}
 		}
 	}
 
@@ -4721,13 +4744,31 @@ static int __release_subcaches(struct iris_hfi_device *device)
 	sc_res_info = (struct cvp_hfi_resource_syscache_info_type *)resource;
 	sc_res = &(sc_res_info->rg_subcache_entries[0]);
 
-	/* Release resource command to Iris */
+	/* Release resource command to Iris
+	 * Mapping of cache slices as:
+	 * cvp slice (scid:8):    HFI_SYSCACHE_TARGET_FDU, HFI_SYSCACHE_TARGET_MPU
+	 * cvpfw slice (scid:19): HFI_SYSCACHE_TARGET_EVA_CPU
+	 */
 	iris_hfi_for_each_subcache_reverse(device, sinfo) {
 		if (sinfo->isset) {
-			/* Update the entry */
-			sc_res[c].size = sinfo->subcache->slice_size;
-			sc_res[c].sc_id = sinfo->subcache->slice_id;
-			c++;
+			if (!strcmp("cvp", sinfo->name)) {
+				sc_res[c].target_hw = HFI_SYSCACHE_TARGET_FDU;
+				sc_res[c].sc_id = sinfo->subcache->slice_id;
+				c++;
+
+				/* Will enable MPU once DV team confirms that
+				 * same slice id can be shared
+				 * sc_res[c].target_hw = HFI_SYSCACHE_TARGET_MPU;
+				 * sc_res[c].sc_id = sinfo->subcache->slice_id;
+				 * c++;
+				 */
+			} else if (!strcmp("cvpfw", sinfo->name)) {
+				sc_res[c].target_hw = HFI_SYSCACHE_TARGET_EVA_CPU;
+				sc_res[c].sc_id = sinfo->subcache->slice_id;
+				c++;
+			} else {
+				dprintk(CVP_ERR, "Invalid subcache %s\n", sinfo->name);
+			}
 			sinfo->isset = false;
 		}
 	}
