@@ -51,10 +51,6 @@ static struct msm_cvp_common_data default_common_data[] = {
 
 static struct msm_cvp_common_data sm8450_common_data[] = {
 	{
-		.key = "qcom,pm-qos-latency-us",
-		.value = 50,
-	},
-	{
 		.key = "qcom,sw-power-collapse",
 		.value = 1,
 	},
@@ -102,10 +98,6 @@ static struct msm_cvp_common_data sm8450_common_data[] = {
 };
 
 static struct msm_cvp_common_data sm8550_common_data[] = {
-	{
-		.key = "qcom,pm-qos-latency-us",
-		.value = 50,
-	},
 	{
 		.key = "qcom,sw-power-collapse",
 		.value = 1,
@@ -155,10 +147,6 @@ static struct msm_cvp_common_data sm8550_common_data[] = {
 
 static struct msm_cvp_common_data sm8550_tvm_common_data[] = {
 	{
-		.key = "qcom,pm-qos-latency-us",
-		.value = 50,
-	},
-	{
 		.key = "qcom,sw-power-collapse",
 		.value = 0,
 	},
@@ -207,10 +195,6 @@ static struct msm_cvp_common_data sm8550_tvm_common_data[] = {
 
 static struct msm_cvp_common_data sm8650_common_data[] = {
 	{
-		.key = "qcom,pm-qos-latency-us",
-		.value = 50,
-	},
-	{
 		.key = "qcom,sw-power-collapse",
 		.value = 0,
 	},
@@ -258,10 +242,6 @@ static struct msm_cvp_common_data sm8650_common_data[] = {
 };
 
 static struct msm_cvp_common_data sm8750_common_data[] = {
-	{
-		.key = "qcom,pm-qos-latency-us",
-		.value = 50,
-	},
 	{
 		.key = "qcom,sw-power-collapse",
 #ifdef USE_PRESIL
@@ -318,10 +298,6 @@ static struct msm_cvp_common_data sm8750_common_data[] = {
 };
 
 static struct msm_cvp_common_data sm8850_common_data[] = {
-	{
-		.key = "qcom,pm-qos-latency-us",
-		.value = 50,
-	},
 	{
 		.key = "qcom,sw-power-collapse",
 #ifdef USE_PRESIL
@@ -473,6 +449,8 @@ static struct msm_cvp_platform_data default_data = {
 	.cvp_hfi_msg = cvp_hfi_msg_defs_v1,
 	.hfi_ver = 1,
 	.hal_version = DEFAULT_HAL_VER,
+	/*Keeping default value as 50*/
+	.latency_arr_us = {50, 50, 50, 50},
 };
 
 static struct msm_cvp_platform_data sm8450_data = {
@@ -487,6 +465,8 @@ static struct msm_cvp_platform_data sm8450_data = {
 	.cvp_hfi_msg = cvp_hfi_msg_defs_v1,
 	.hfi_ver = 1,
 	.hal_version = DEFAULT_HAL_VER,
+	/*Keeping default value as 50*/
+	.latency_arr_us = {50, 50, 50, 50},
 };
 
 static struct msm_cvp_platform_data sm8550_data = {
@@ -501,6 +481,8 @@ static struct msm_cvp_platform_data sm8550_data = {
 	.cvp_hfi_msg = cvp_hfi_msg_defs_v1,
 	.hfi_ver = 1,
 	.hal_version = DEFAULT_HAL_VER,
+	/*Keeping default value as 50*/
+	.latency_arr_us = {50, 50, 50, 50},
 };
 
 static struct msm_cvp_platform_data sm8550_tvm_data = {
@@ -515,6 +497,8 @@ static struct msm_cvp_platform_data sm8550_tvm_data = {
 	.cvp_hfi_msg = cvp_hfi_msg_defs_v1,
 	.hfi_ver = 1,
 	.hal_version = DEFAULT_HAL_VER,
+	/*Keeping default value as 50*/
+	.latency_arr_us = {50, 50, 50, 50},
 };
 
 static struct msm_cvp_platform_data sm8650_data = {
@@ -529,6 +513,8 @@ static struct msm_cvp_platform_data sm8650_data = {
 	.cvp_hfi_msg = cvp_hfi_msg_defs_v1,
 	.hfi_ver = 1,
 	.hal_version = DEFAULT_HAL_VER,
+	/*Keeping default value as 50*/
+	.latency_arr_us = {50, 50, 50, 50},
 };
 
 static struct msm_cvp_platform_data sm8750_data = {
@@ -543,6 +529,8 @@ static struct msm_cvp_platform_data sm8750_data = {
 	.cvp_hfi_msg = cvp_hfi_msg_defs_v2,
 	.hfi_ver = 2,
 	.hal_version = DEFAULT_HAL_VER,
+	/*Keeping default value as 50*/
+	.latency_arr_us = {50, 50, 50, 50},
 };
 
 static struct msm_cvp_platform_data sm8850_data = {
@@ -557,6 +545,8 @@ static struct msm_cvp_platform_data sm8850_data = {
 	.cvp_hfi_msg = cvp_hfi_msg_defs_v2,
 	.hfi_ver = 2,
 	.hal_version = KNP_HAL_VER,
+	/*Keeping default value as 50*/
+	.latency_arr_us = {50, 50, 50, 50},
 };
 
 static struct msm_cvp_platform_data sm8845_data = {
@@ -571,6 +561,8 @@ static struct msm_cvp_platform_data sm8845_data = {
 	.cvp_hfi_msg = cvp_hfi_msg_defs_v2,
 	.hfi_ver = 2,
 	.hal_version = KNP_HAL_VER,
+	/*Keeping default value as 50*/
+	.latency_arr_us = {50, 50, 50, 50},
 };
 
 static const struct of_device_id msm_cvp_dt_match[] = {

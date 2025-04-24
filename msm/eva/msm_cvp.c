@@ -1660,8 +1660,10 @@ int msm_cvp_set_sysprop_sess(struct msm_cvp_inst *inst,
 {
 	struct cvp_session_prop *session_prop;
 	int rc = 0;
+	struct cvp_pm_qos pm_qos;
 
 	session_prop = &inst->prop;
+	pm_qos = inst->core->resources.pm_qos;
 
 	switch (prop_array->prop_type) {
 		case EVA_KMD_PROP_SESSION_TYPE:
@@ -1680,9 +1682,15 @@ int msm_cvp_set_sysprop_sess(struct msm_cvp_inst *inst,
 			session_prop->dsp_mask = prop_array->data;
 			break;
 		case EVA_KMD_PROP_SESSION_LATENCY:
-			inst->pm_qos_latency = prop_array->data;
-			dprintk(CVP_INFO, "inst %pK - New latency value from user %d\n",
-				inst, inst->pm_qos_latency);
+			if (prop_array->data < LATENCY_TOLERANCE_CRITICAL ||
+					prop_array->data > LATENCY_TOLERANCE_HIGH) {
+				dprintk(CVP_WARN, "inst %pK - New latency LEVEL is INVALID %d\n",
+					inst, prop_array->data);
+			} else {
+				inst->pm_qos_latency = pm_qos.latency_array_us[prop_array->data];
+				dprintk(CVP_INFO, "inst %pK - New latency level %d, value %d\n",
+					inst, prop_array->data, inst->pm_qos_latency);
+			}
 			break;
 		case EVA_KMD_PROP_SESSION_DUMPOFFSET:
 			session_prop->dump_offset = prop_array->data;
