@@ -2111,9 +2111,12 @@ hfi_queue_init:
 sfr_init:
 	__sfr_init(dev);
 #ifdef CVP_SW_DBG_BUF_ENABLED
+	core = cvp_driver->cvp_core;
 	if (dev->sw_dbg_buf.align_virtual_addr) {
 		memset((void *)dev->sw_dbg_buf.align_virtual_addr,
 				0, ALIGNED_SW_DBG_BUF_SIZE);
+		if (core)
+			core->kmd_dbg.kmd_sess_cnt = 0;
 	} else {
 		rc = __smem_alloc(dev, mem_addr, ALIGNED_SW_DBG_BUF_SIZE, 1,
 				SMEM_UNCACHED, O_RDWR);
@@ -2125,13 +2128,11 @@ sfr_init:
 			dev->sw_dbg_buf.align_virtual_addr = mem_addr->align_virtual_addr;
 			dev->sw_dbg_buf.mem_size = ALIGNED_SW_DBG_BUF_SIZE;
 			dev->sw_dbg_buf.mem_data = mem_addr->mem_data;
-			core = cvp_driver->cvp_core;
-			if (!core)
-				dprintk(CVP_ERR, "%s: Core is null\n", __func__);
-			else {
+			if (core) {
 				mutex_init(&core->kmd_dbg.dbg_lock);
 				core->kmd_dbg.kmd_buf_offset = 0;
 				core->kmd_dbg.kmd_buf_cnt = 0;
+				core->kmd_dbg.kmd_sess_cnt = 0;
 			}
 		}
 	}
@@ -4700,6 +4701,8 @@ static int __set_subcaches(struct iris_hfi_device *device)
 			if (!strcmp("cvp", sinfo->name)) {
 				sc_res[c].target_hw = HFI_SYSCACHE_TARGET_FDU;
 				sc_res[c].sc_id = sinfo->subcache->slice_id;
+				dprintk(CVP_CORE, "Subcache slice id: %d size: %d\n",
+					sinfo->subcache->slice_id, sinfo->subcache->slice_size);
 				c++;
 
 				/* Will enable MPU once DV team confirms that
@@ -4711,6 +4714,8 @@ static int __set_subcaches(struct iris_hfi_device *device)
 			} else if (!strcmp("cvpfw", sinfo->name)) {
 				sc_res[c].target_hw = HFI_SYSCACHE_TARGET_EVA_CPU;
 				sc_res[c].sc_id = sinfo->subcache->slice_id;
+				dprintk(CVP_CORE, "Subcache slice id: %d size: %d\n",
+					sinfo->subcache->slice_id, sinfo->subcache->slice_size);
 				c++;
 			} else {
 				dprintk(CVP_ERR, "Invalid subcache %s\n", sinfo->name);
@@ -5266,9 +5271,11 @@ static const char * const mid_names[25] = {
 static void __print_reg_details_errlog3_low(u32 val)
 {
 	u32 mid, sid;
-
+#ifdef CONFIG_EVA_SUN
 	mid = (val >> 5) & 0x1F;
-
+#else
+	mid = (val >> 7) & 0x1F;
+#endif
 	sid = (val >> 2) & 0x7;
 	dprintk(CVP_ERR, "CVP_NOC_CORE_ERL_MAIN_ERRLOG3_LOW:     %#x\n", val);
 	dprintk(CVP_ERR, "Sub-client:%s, SID: %d\n", mid_names[mid], sid);

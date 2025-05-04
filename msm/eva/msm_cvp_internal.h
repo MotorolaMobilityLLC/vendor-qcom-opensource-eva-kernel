@@ -27,7 +27,7 @@
 #include "cvp_hfi_helper.h"
 #include "msm_cvp_sw_dbg.h"
 
-#define MAX_SUPPORTED_INSTANCES 24
+#define MAX_SUPPORTED_INSTANCES 32
 #define MAX_CV_INSTANCES MAX_SUPPORTED_INSTANCES
 #define MAX_DEBUGFS_NAME 50
 #define MAX_DSP_INIT_ATTEMPTS 16
@@ -49,6 +49,8 @@
 #define SESSION_NAME_MAX_LEN 256
 
 #define ARP_BUF_SIZE 0x300000
+
+#define ARP_CHUNK_SIZE 204800
 
 #define CVP_RT_PRIO_THRESHOLD 1
 
@@ -241,6 +243,7 @@ struct cvp_session_prop {
 	u32 priority;
 	u32 is_secure;
 	u32 dsp_mask;
+	u32 pkt_concurrency;
 	u32 fthread_nr;
 	u32 cycles[HFI_MAX_HW_THREADS];
 	u32 fw_cycles;

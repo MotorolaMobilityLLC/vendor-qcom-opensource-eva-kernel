@@ -1565,6 +1565,7 @@ void __dsp_cvp_sess_create(struct cvp_dsp_cmd_msg *cmd)
 	inst->prop.priority = dsp2cpu_cmd->session_prio;
 	inst->prop.is_secure = dsp2cpu_cmd->is_secure;
 	inst->prop.dsp_mask = dsp2cpu_cmd->dsp_access_mask;
+	inst->prop.pkt_concurrency = 8;
 
 	eva_fastrpc_driver_add_sess(frpc_node, inst);
 	rc = msm_cvp_session_create(inst);
@@ -1668,8 +1669,8 @@ void __dsp_cvp_sess_delete(struct cvp_dsp_cmd_msg *cmd)
 		dprintk(CVP_ERR,
 			"%s pid 0x%x not registered with fastrpc, but allow delete session\n",
 			__func__, dsp2cpu_cmd->pid);
-		// cmd->ret = -1;
-		// return;
+		cmd->ret = -1;
+		goto dsp_fail_delete;
 	} else {
 		cvp_put_fastrpc_node(frpc_node);
 	}
@@ -2325,7 +2326,12 @@ static struct file *msm_cvp_fget(unsigned int fd, struct task_struct *task,
 	rcu_read_unlock();
 #else
 	unsigned int ret_fd = fd;
+
+#if (KERNEL_VERSION(6, 13, 0) <= LINUX_VERSION_CODE)
+	file = fget_task_next(task, &ret_fd);
+#else
 	file = task_lookup_next_fdget_rcu(task, &ret_fd);
+#endif
 	if (ret_fd != fd)
 		dprintk(CVP_ERR, "%s FAILED to get file from fd = %u, %u\n",
 			__func__, fd, ret_fd);
@@ -2411,7 +2417,7 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst,
 	smem->buf_idx = 0;
 	smem->fd = buf->fd;
 	dprintk(CVP_MEM, "%s: dma_buf = %llx\n", __func__, dma_buf);
-	rc = msm_cvp_map_smem(inst, smem, "map dsp"); // Jingyu todo: change this?
+	rc = msm_cvp_map_smem(inst, smem, "map dsp");
 	if (rc) {
 		print_client_buffer(CVP_ERR, "map failed", inst, buf);
 		goto exit;
@@ -2426,6 +2432,7 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst,
 	cbuf->index = buf->index;
 
 	buf->reserved[0] = (uint32_t)smem->device_addr;
+	buf->size = dma_buf->size; // Pass to QDI for reference
 
 	mutex_lock(&frpc_node->cvpdspbufs.lock);
 	list_add_tail(&cbuf->list, &frpc_node->cvpdspbufs.list);
