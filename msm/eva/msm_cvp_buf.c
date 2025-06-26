@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/pid.h>
@@ -1527,7 +1528,7 @@ int msm_cvp_mark_user_persist(struct msm_cvp_inst *inst,
 
 int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 			struct eva_kmd_hfi_packet *in_pkt,
-			unsigned int offset, unsigned int buf_num)
+			unsigned int offset, unsigned int buf_num, uint32_t *fd_arr)
 {
 	struct cvp_buf_type *buf;
 	struct cvp_hfi_cmd_session_hdr *cmd_hdr;
@@ -1554,6 +1555,7 @@ int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 
 			return -EINVAL;
 		}
+		fd_arr[i] = buf->fd;
 		buf->fd = iova;
 	}
 	return 0;
