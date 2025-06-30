@@ -723,9 +723,6 @@ void handle_sys_error(enum hal_command_response cmd, void *data)
 	enum cvp_core_state cur_state;
 	enum cvp_session_state s_state;
 	enum cvp_session_errorcode s_ecode;
-#ifdef CVP_SW_DBG_BUF_ENABLED
-	bool log = false;
-#endif
 
 	if (!response) {
 		dprintk(CVP_ERR,
@@ -773,12 +770,13 @@ void handle_sys_error(enum hal_command_response cmd, void *data)
 		dprintk(CVP_WARN, "Got NOC error");
 		msm_cvp_noc_error_info(core);
 	}
-
 #ifdef CVP_SW_DBG_BUF_ENABLED
-	log = (core->kmd_trace.kmd_debug_log.log.snapshot_index > 0) ? false : true;
-	list_for_each_entry(inst, &core->instances, list) {
-		msm_cvp_print_inst_bufs(inst, log);
+	else {
+		list_for_each_entry(inst, &core->instances, list) {
+			msm_cvp_print_inst_bufs(inst, true);
+		}
 	}
+
 	if (msm_cvp_sw_dbg_buf_dump & BIT(0)) {
 		eva_kmd_debug_log_dump();
 		eva_cmd_msg_queue_dump();

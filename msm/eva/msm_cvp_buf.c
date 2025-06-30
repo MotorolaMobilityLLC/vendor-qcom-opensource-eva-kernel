@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.​
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/pid.h>
@@ -2334,7 +2334,7 @@ void msm_cvp_print_inst_bufs(struct msm_cvp_inst *inst, bool log)
 	if (log && core->kmd_trace.kmd_debug_log.log.snapshot_index < 16) {
 		snap = &core->kmd_trace.kmd_debug_log.log.snapshot[
 			core->kmd_trace.kmd_debug_log.log.snapshot_index];
-		snap->session = inst->session;
+		snap->session = hash32_ptr(inst->session);
 		core->kmd_trace.kmd_debug_log.log.snapshot_index++;
 	}
 
