@@ -1329,7 +1329,7 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 	struct msm_cvp_smem *smem2;
 	struct rb_node *node;
 	struct msm_cvp_core *core;
-	int index;
+	int index = 0;
 
 	core = cvp_driver->cvp_core;
 	mutex_lock(&inst->dma_cache.lock);
@@ -1799,6 +1799,11 @@ static void msm_cvp_unmap_frame_buf(struct msm_cvp_inst *inst,
 		smem = buf->smem;
 		msm_cvp_cache_operations(smem, type, buf->offset, buf->size);
 
+		if (!smem) {
+			dprintk(CVP_ERR, "%s: Invalid smem\n", __func__);
+			continue;
+		}
+
 #ifdef USE_PRESIL42
 	presil42_unmap_frame_buf(smem, buf);
 #endif
@@ -1904,6 +1909,9 @@ int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
 	struct cvp_hfi_cmd_session_hdr *cmd_hdr;
 	int i, ret;
 	u32 iova;
+	struct msm_cvp_persist_list *list_node, *dummy1;
+	struct cvp_hfi_persist_buffer_packet *persist_pkt =
+		(struct cvp_hfi_persist_buffer_packet *) in_pkt;
 
 	if (!offset || !buf_num)
 		return 0;
@@ -1931,6 +1939,15 @@ int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
 		}
 		buf->fd = iova;
 	}
+	mutex_lock(&inst->persist_list.lock);
+	list_for_each_entry_safe(list_node, dummy1, &inst->persist_list.list, list) {
+		if (!strcmp(list_node->info.feature,
+				get_feature_name_from_type(persist_pkt->nCVKernelType))) {
+			list_del(&list_node->list);
+			kfree(list_node);
+		}
+	mutex_unlock(&inst->persist_list.lock);
+}
 	return 0;
 }
 
@@ -1940,9 +1957,13 @@ int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 {
 	struct cvp_buf_type *buf;
 	struct cvp_hfi_cmd_session_hdr *cmd_hdr;
+	struct persist_info node;
+	struct msm_cvp_persist_list *list_node;
 	int i, ret;
 	u32 iova;
 	u64 ktid;
+	struct cvp_hfi_persist_buffer_packet *persist_pkt =
+			(struct cvp_hfi_persist_buffer_packet *) in_pkt;
 
 	if (!offset || !buf_num)
 		return 0;
@@ -1983,6 +2004,18 @@ int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 	}
 	print_persist_buffer_info(CVP_MEM, "MAP user persist", 0,
 		inst, in_pkt);
+
+	strscpy(node.feature, get_feature_name_from_type(persist_pkt->nCVKernelType));
+	node.feature[sizeof(node.feature) - 1] = '\0';
+	node.persist_size = persist_pkt->nPersist1Buffer.size + persist_pkt->nPersist2Buffer.size +
+				persist_pkt->nPersist3Buffer.size;
+	list_node = kmalloc(sizeof(struct msm_cvp_persist_list), GFP_KERNEL);
+	if (list_node) {
+		mutex_lock(&inst->persist_list.lock);
+		list_node->info = node;
+		list_add_tail(&list_node->list, &inst->persist_list.list);
+		mutex_unlock(&inst->persist_list.lock);
+	}
 	return 0;
 }
 
@@ -2097,6 +2130,7 @@ int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst)
 	struct eva_kmd_buffer buf;
 	struct list_head *ptr = (struct list_head *)0xdead;
 	struct list_head *next = (struct list_head *)0xdead;
+	struct msm_cvp_persist_list *list_node, *dummy2;
 	struct msm_cvp_core *core = cvp_driver->cvp_core;
 
 	session = (struct cvp_hal_session *)inst->session;
@@ -2158,6 +2192,12 @@ int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst)
 	}
 	mutex_unlock(&inst->persistbufs.lock);
 
+	mutex_lock(&inst->persist_list.lock);
+	list_for_each_entry_safe(list_node, dummy2, &inst->persist_list.list, list) {
+		list_del(&list_node->list);
+		kfree(list_node);
+	}
+	mutex_unlock(&inst->persist_list.lock);
 	mutex_lock(&inst->dma_cache.lock);
 	node = rb_first(&inst->dma_cache.rbtree);
 
@@ -2282,6 +2322,11 @@ void msm_cvp_print_inst_bufs(struct msm_cvp_inst *inst, bool log)
 	struct cvp_hal_session *session;
 	u32 session_id;
 
+	if (!inst) {
+		dprintk(CVP_ERR, "%s - invalid param %pK\n",
+			__func__, inst);
+		return;
+	}
 	session = (struct cvp_hal_session *)inst->session;
 	session_id = hash32_ptr(session);
 
@@ -2291,12 +2336,6 @@ void msm_cvp_print_inst_bufs(struct msm_cvp_inst *inst, bool log)
 			core->kmd_trace.kmd_debug_log.log.snapshot_index];
 		snap->session = inst->session;
 		core->kmd_trace.kmd_debug_log.log.snapshot_index++;
-	}
-
-	if (!inst) {
-		dprintk(CVP_ERR, "%s - invalid param %pK\n",
-			__func__, inst);
-		return;
 	}
 
 	dprintk(CVP_ERR,
@@ -2406,6 +2445,8 @@ struct cvp_internal_buf *cvp_allocate_arp_bufs(struct msm_cvp_inst *inst,
 	struct cvp_internal_buf *buf;
 	struct msm_cvp_list *buf_list;
 	u32 smem_flags = SMEM_UNCACHED;
+	struct persist_info node;
+	struct msm_cvp_persist_list *list_node;
 	int rc = 0;
 
 	if (!inst) {
@@ -2452,6 +2493,16 @@ struct cvp_internal_buf *cvp_allocate_arp_bufs(struct msm_cvp_inst *inst,
 	buf->type = HFI_BUFFER_INTERNAL_PERSIST_1;
 	buf->ownership = DRIVER;
 	atomic_add(buf->size, &inst->persist_usage);
+
+	strscpy(node.feature, "Internal Scratch Buffer");
+	node.persist_size = buf->size;
+	list_node = kmalloc(sizeof(struct msm_cvp_persist_list), GFP_KERNEL);
+	if (list_node) {
+		mutex_lock(&inst->persist_list.lock);
+		list_node->info = node;
+		list_add_tail(&list_node->list, &inst->persist_list.list);
+		mutex_unlock(&inst->persist_list.lock);
+	}
 	print_persist_buffer_info(CVP_MEM, "MAP ARP buffer", buf->size,
 				inst, NULL);
 
@@ -2471,6 +2522,7 @@ fail_kzalloc:
 int cvp_release_arp_buffers(struct msm_cvp_inst *inst)
 {
 	struct msm_cvp_smem *smem;
+	struct msm_cvp_persist_list *list_node, *dummy1;
 	struct list_head *ptr = (struct list_head *)0xdead;
 	struct list_head *next = (struct list_head *)0xdead;
 	struct cvp_internal_buf *buf;
@@ -2534,6 +2586,15 @@ int cvp_release_arp_buffers(struct msm_cvp_inst *inst)
 			atomic_sub(buf->size, &inst->persist_usage);
 			print_persist_buffer_info(CVP_MEM, "FREE ARP buffer",
 						buf->size, inst, NULL);
+			mutex_lock(&inst->persist_list.lock);
+			list_for_each_entry_safe(list_node, dummy1,
+						&inst->persist_list.list, list) {
+				if (!strcmp(list_node->info.feature, "Internal Scratch Buffer")) {
+					list_del(&list_node->list);
+					kfree(list_node);
+				}
+			}
+			mutex_unlock(&inst->persist_list.lock);
 			list_del(&buf->list);
 			atomic_dec(&smem->refcount);
 			msm_cvp_smem_free(smem);

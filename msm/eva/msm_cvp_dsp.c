@@ -342,8 +342,10 @@ search_again:
 
 	mutex_lock(&me->fastrpc_driver_list.lock);
 	list_for_each_safe(ptr, next, &me->fastrpc_driver_list.list) {
-		if (!ptr)
+		if (!ptr) {
+			frpc_node = NULL;
 			break;
+		}
 		frpc_node = list_entry(ptr,
 			struct cvp_dsp_fastrpc_driver_entry, list);
 
@@ -387,8 +389,10 @@ search_again:
 
 	mutex_lock(&me->fastrpc_driver_list.lock);
 	list_for_each_safe(ptr, next, &me->fastrpc_driver_list.list) {
-		if (!ptr)
+		if (!ptr) {
+			frpc_node = NULL;
 			break;
+		}
 		frpc_node = list_entry(ptr,
 			struct cvp_dsp_fastrpc_driver_entry, list);
 
@@ -636,7 +640,7 @@ static int eva_fastrpc_remove_buffers(struct cvp_dsp_fastrpc_driver_entry *frpc_
 	struct msm_cvp_list *buf_list = NULL;
 	struct list_head *ptr_dsp_buf = NULL, *next_dsp_buf = NULL;
 	struct cvp_internal_buf *buf = NULL;
-	int rc;
+	int rc = 0;
 
 	if (!frpc_node)
 		return -EINVAL;
@@ -1362,8 +1366,6 @@ static void eva_fastrpc_driver_unregister(uint32_t handle, bool force_exit)
 		DEINIT_MSM_CVP_LIST(&frpc_node->dsp_sessions);
 		DEINIT_MSM_CVP_LIST(&frpc_node->cvpdspbufs);
 
-		cvp_put_fastrpc_node(frpc_node);
-
 		__fastrpc_driver_unregister(&frpc_node->cvp_fastrpc_driver);
 		mutex_lock(&me->driver_name_lock);
 		eva_fastrpc_driver_release_name(frpc_node);
@@ -1372,7 +1374,6 @@ static void eva_fastrpc_driver_unregister(uint32_t handle, bool force_exit)
 	} else {
 		dprintk(CVP_WARN, "%s Fastrpc driver hdl %#x hdl %#x, f %d, session count is %d, abort unregistration\n",
 						__func__, handle, dsp2cpu_cmd->pid, (uint32_t)force_exit, frpc_node->session_cnt);
-		cvp_put_fastrpc_node(frpc_node);
 	}
 }
 
@@ -1647,6 +1648,9 @@ void __dsp_cvp_sess_create(struct cvp_dsp_cmd_msg *cmd)
 		inst->prop.dsp_mask = dsp2cpu_cmd->dsp_access_mask;
 		inst->prop.pkt_concurrency = 8;
 	} else { // Version 1
+		inst->dsp_handle = dsp2cpu_cmd->pid;
+		inst->fastrpc_entry = frpc_node;
+
 		struct eva_kmd_sys_properties *props = &dsp2cpu_cmd_v2->prop_data;
 		struct eva_kmd_sys_property *prop_array;
 		int i = 0;
@@ -2430,11 +2434,6 @@ static bool __is_buf_valid(struct msm_cvp_inst *inst,
 
 	if (!inst || !inst->core || !buf || !frpc_node) {
 		dprintk(CVP_ERR, "%s: invalid params\n", __func__);
-		return false;
-	}
-
-	if (buf->fd < 0) {
-		dprintk(CVP_ERR, "%s: Invalid fd = %d", __func__, buf->fd);
 		return false;
 	}
 
