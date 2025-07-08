@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.​
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include "msm_cvp.h"
@@ -104,6 +104,12 @@ static int cvp_wait_process_message(struct msm_cvp_inst *inst,
 	struct cvp_hfi_msg_session_hdr *hdr;
 	int rc = 0;
 	CVPKERNEL_ATRACE_BEGIN("cvp_wait_process_message");
+
+	if (!inst) {
+		dprintk(CVP_ERR, "%s: Invalid inst", __func__);
+		goto exit;
+	}
+
 	if (wait_event_timeout(sq->wq,
 		cvp_msg_pending(sq, &msg, ktid), timeout) == 0) {
 		dprintk(CVP_WARN, "session queue wait timeout and session_id = %#x\n",
@@ -741,6 +747,14 @@ static int cvp_enqueue_pkt(struct msm_cvp_inst* inst,
 	struct cvp_buf_type *buf;
 
 	CVPKERNEL_ATRACE_BEGIN("cvp_enqueue_pkt");
+
+	if (in_offset > MAX_HFI_PKT_SIZE ||
+				in_buf_num > MAX_HFI_PKT_SIZE) {
+		dprintk(CVP_ERR, "%s: Offset:%d or Buf num:%d incorrect",
+				__func__, in_offset, in_buf_num);
+		rc = -EINVAL;
+		return rc;
+	}
 
 	ops_tbl = inst->core->dev_ops;
 
