@@ -1211,6 +1211,13 @@ static int eva_fastrpc_driver_register(uint32_t handle)
 		/* Init completion */
 		init_completion(&frpc_node->fastrpc_probe_completion);
 
+		mutex_lock(&me->fastrpc_driver_list.lock);
+		list_add_tail(&frpc_node->list, &me->fastrpc_driver_list.list);
+		INIT_MSM_CVP_LIST(&frpc_node->dsp_sessions);
+		INIT_MSM_CVP_LIST(&frpc_node->cvpdspbufs);
+		mutex_unlock(&me->fastrpc_driver_list.lock);
+		dprintk(CVP_DSP, "Add frpc node 0x%x to list\n", frpc_node);
+
 		/* register fastrpc device to this session */
 		rc = __fastrpc_driver_register(&frpc_node->cvp_fastrpc_driver);
 		if (rc) {
@@ -1219,13 +1226,6 @@ static int eva_fastrpc_driver_register(uint32_t handle)
 			skip_deregister = true;
 			goto fail_fastrpc_driver_register;
 		}
-
-		mutex_lock(&me->fastrpc_driver_list.lock);
-		list_add_tail(&frpc_node->list, &me->fastrpc_driver_list.list);
-		INIT_MSM_CVP_LIST(&frpc_node->dsp_sessions);
-		INIT_MSM_CVP_LIST(&frpc_node->cvpdspbufs);
-		mutex_unlock(&me->fastrpc_driver_list.lock);
-		dprintk(CVP_DSP, "Add frpc node 0x%x to list\n", frpc_node);
 
 		/* signal wait reuse dsp timeout setup for now */
 		if (!wait_for_completion_timeout(
@@ -1245,14 +1245,13 @@ static int eva_fastrpc_driver_register(uint32_t handle)
 	return rc;
 
 fail_fastrpc_driver_register:
-	if (!skip_deregister) {
-		if (!dequeue_frpc_node(frpc_node)) {
-			dprintk(CVP_DSP, "%s fastrpc node %pK hdl 0x%x released elsewhere\n",
-				__func__, frpc_node, handle);
-			return -EINVAL;
-		}
-		__fastrpc_driver_unregister(&frpc_node->cvp_fastrpc_driver);
+	if (!dequeue_frpc_node(frpc_node)) {
+		dprintk(CVP_DSP, "%s fastrpc node %pK hdl 0x%x released elsewhere\n",
+			__func__, frpc_node, handle);
+		return -EINVAL;
 	}
+	if (!skip_deregister)
+		__fastrpc_driver_unregister(&frpc_node->cvp_fastrpc_driver);
 
 	mutex_lock(&me->driver_name_lock);
 	eva_fastrpc_driver_release_name(frpc_node);
