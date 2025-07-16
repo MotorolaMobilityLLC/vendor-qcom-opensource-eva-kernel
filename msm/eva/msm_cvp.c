@@ -429,6 +429,7 @@ exit:
 	if (fc->signature == 0xFEEDFACE)
 		rc = inst->core->synx_ftbl->cvp_synx_ops(
 			inst, CVP_OUTPUT_SYNX, fc, &synx_state);
+	fc->msg_pkt = NULL;
 	CVPKERNEL_ATRACE_END("cvp_synx_ops CVP_OUTPUT_SYNX");
 	CVPKERNEL_ATRACE_END("cvp_fence_proc");
 	return rc;
@@ -821,8 +822,13 @@ static int cvp_enqueue_pkt(struct msm_cvp_inst* inst,
 					/* Update the in_pkt s.t iova is replaced back with fd */
 					buf = (struct cvp_buf_type *)&in_pkt->pkt_data[offset];
 					offset += sizeof(*buf) >> 2;
+
+					if (offset > MAX_HFI_PKT_SIZE)
+						break;
+
 					if (!buf->size || fd_arr[i] < 0)
 						continue;
+
 					buf->fd = fd_arr[i];
 				}
 				rc = msm_cvp_unmap_user_persist(inst,
@@ -843,8 +849,13 @@ static int cvp_enqueue_pkt(struct msm_cvp_inst* inst,
 				/* Update the in_pkt s.t iova is replaced back with fd */
 				buf = (struct cvp_buf_type *)&in_pkt->pkt_data[offset];
 				offset += sizeof(*buf) >> 2;
+
+				if (offset > MAX_HFI_PKT_SIZE)
+					break;
+
 				if (!buf->size || fd_arr[i] < 0)
 					continue;
+
 				buf->fd = fd_arr[i];
 			}
 			rc = msm_cvp_unmap_user_persist(inst,
