@@ -2063,6 +2063,9 @@ int cvp_session_flush_all(struct msm_cvp_inst *inst)
 	q = &inst->fence_cmd_queue;
 	ops_tbl = inst->core->dev_ops;
 
+	/* Boost EVA clock frequency before sending flush to FW*/
+	msm_cvp_set_fmax(inst->core);
+
 	/*
 	 * Session fence queue is set to OP_DRAIN mode below
 	 * DO NOT return directly without goto exit
@@ -2074,7 +2077,6 @@ int cvp_session_flush_all(struct msm_cvp_inst *inst)
 	dprintk(CVP_SESS, "%s: (%#x) send flush to fw\n",
 			__func__, hash32_ptr(inst->session));
 
-	/* Send flush to FW */
 	ktid = atomic64_inc_return(&inst->core->kernel_trans_id);
 	ktid &= (FENCE_BIT - 1);
 	rc = call_hfi_op(ops_tbl, session_flush, (void *)inst->session, ktid);
@@ -2094,6 +2096,8 @@ int cvp_session_flush_all(struct msm_cvp_inst *inst)
 			__func__, hash32_ptr(inst->session));
 
 exit:
+	/* Restore original EVA clock freq */
+	msm_cvp_set_clocks(inst->core);
 	if (!rc)
 		rc = cvp_drain_fence_sched_list(inst);
 
