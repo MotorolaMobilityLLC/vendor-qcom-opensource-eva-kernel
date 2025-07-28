@@ -289,6 +289,13 @@ struct eva_kmd_arg {
 	} data;
 };
 
+enum LATENCY_TOLERANCE_LEVEL {
+	LATENCY_TOLERANCE_CRITICAL,
+	LATENCY_TOLERANCE_LOW,
+	LATENCY_TOLERANCE_MED,
+	LATENCY_TOLERANCE_HIGH,
+};
+
 struct eva_kmd_request_power {
 	__u32 deprecated;
 };
