@@ -207,6 +207,10 @@ inline int cvp_create_pkt_cmd_sys_session_init(
 		struct cvp_hal_session *session)
 {
 	int rc = 0;
+
+	if (!session)
+		return -EINVAL;
+
 	struct msm_cvp_inst *inst = session->session_id;
 
 	if (!pkt || !inst)
@@ -272,6 +276,10 @@ int cvp_create_pkt_cmd_session_cmd(struct cvp_hal_session_cmd_pkt *pkt,
 			int pkt_type, struct cvp_hal_session *session)
 {
 	int rc = 0;
+
+	if (!session)
+		return -EINVAL;
+
 	struct msm_cvp_inst *inst = session->session_id;
 
 	if (!pkt || !inst)
@@ -289,6 +297,10 @@ int cvp_session_cmd_ktid(struct cvp_hfi_cmd_session_hdr *pkt,
 			u64 ktid)
 {
 	int rc = 0;
+
+	if (!session)
+		return -EINVAL;
+
 	struct msm_cvp_inst *inst = session->session_id;
 
 	if (!pkt || !inst)

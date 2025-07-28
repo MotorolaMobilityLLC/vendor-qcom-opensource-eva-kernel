@@ -72,7 +72,7 @@ int print_smem(u32 tag, const char *str, struct msm_cvp_inst *inst,
 		} else {
 			dprintk(tag,
 				"%s: %x : 0x%llx size %d flags %#x iova %#x\n",
-				str, hash32_ptr(inst->session), smem->dma_buf,
+				str, inst->sess_id, smem->dma_buf,
 				smem->size, smem->flags, smem->device_addr);
 
 			dprintk(tag,
@@ -285,7 +285,7 @@ void print_persist_buffer_info(u32 tag, const char *str, u32 buffer_size,
 	if (persist_pkt == NULL)
 		dprintk(tag, "%s size %d total persist size = %d for session %s (%x)",
 			str, buffer_size, atomic_read(&inst->persist_usage),
-			inst->prop.session_name, hash32_ptr(inst->session));
+			inst->prop.session_name, inst->sess_id);
 	else {
 		dprintk(tag, "Feature: %s :{Persist 1 %lu Persist 2 %lu Persist 3 %lu}",
 			get_feature_name_from_type(persist_pkt->nCVKernelType),
