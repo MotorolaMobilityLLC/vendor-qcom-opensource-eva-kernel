@@ -330,9 +330,14 @@ int cvp_create_pkt_cmd_session_set_buffers(
 {
 	int rc = 0;
 	struct cvp_hfi_cmd_session_set_buffers_packet *pkt;
-	struct msm_cvp_inst *inst = session->session_id;
+	struct msm_cvp_inst *inst;
 
-	if (!cmd || !session || !inst)
+	if (!session)
+		return -EINVAL;
+
+	inst = session->session_id;
+
+	if (!cmd || !inst)
 		return -EINVAL;
 
 	pkt = (struct cvp_hfi_cmd_session_set_buffers_packet *)cmd;
@@ -358,9 +363,14 @@ int cvp_create_pkt_cmd_session_release_buffers(
 		struct cvp_hal_session *session)
 {
 	struct cvp_session_release_buffers_packet *pkt;
-	struct msm_cvp_inst *inst = session->session_id;
+	struct msm_cvp_inst *inst;
 
-	if (!cmd || !session || !inst)
+	if (!session)
+		return -EINVAL;
+
+	inst = session->session_id;
+
+	if (!cmd || !inst)
 		return -EINVAL;
 
 	pkt = (struct cvp_session_release_buffers_packet *)cmd;
@@ -381,9 +391,14 @@ int cvp_create_pkt_cmd_session_send(
 	int def_idx;
 	struct cvp_hal_session_cmd_pkt *ptr =
 		(struct cvp_hal_session_cmd_pkt *)in_pkt;
-	struct msm_cvp_inst *inst = session->session_id;
+	struct msm_cvp_inst *inst;
 
-	if (!in_pkt || !session)
+	if (!session)
+		return -EINVAL;
+
+	inst = session->session_id;
+
+	if (!in_pkt || !inst)
 		return -EINVAL;
 
 	if (ptr->size > MAX_HFI_PKT_SIZE * sizeof(unsigned int))
