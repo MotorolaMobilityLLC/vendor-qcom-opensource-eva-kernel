@@ -632,16 +632,15 @@ void handle_session_timeout(struct msm_cvp_inst *inst, bool stop_required)
 		return;
 	}
 
-
-	dprintk(CVP_ERR, "%s: Session timeout occurred for inst %pK sess %x\n",
-			__func__, inst, inst->sess_id);
-
-	s = cvp_get_inst_validate(inst->core, inst);
+	s = cvp_get_inst_validate(core, inst);
 	if (!s) {
 		dprintk(CVP_WARN, "%s: Session is not a valid session\n",
 				__func__);
 		return;
 	}
+
+	dprintk(CVP_ERR, "%s: Session timeout occurred for inst %pK sess %x\n",
+			__func__, inst, inst->sess_id);
 
 	sq = &inst->session_queue;
 	spin_lock(&sq->lock);
@@ -1507,16 +1506,16 @@ void msm_cvp_ssr_handler(struct work_struct *work)
 		dprintk(CVP_ERR, "Session abort triggered\n");
 		mutex_lock(&core->lock);
 		list_for_each_entry_safe(inst, inst_temp, &core->instances, list) {
-			dprintk(CVP_WARN,
-				"Session to abort: inst %#x ref %x\n",
-				inst, kref_read(&inst->kref));
 			if (inst != NULL) {
-				s = cvp_get_inst_validate(inst->core, inst);
+				s = cvp_get_inst_validate(core, inst);
 				if (!s) {
-					dprintk(CVP_WARN, "%s: Session is not a valid session\n",
+					dprintk(CVP_WARN, "%s: Session is not valid\n",
 						__func__);
 					continue;
 				}
+				dprintk(CVP_WARN,
+					"Session to abort: inst %#x ref %x\n",
+					inst, kref_read(&inst->kref));
 				print_hfi_queue_info(ops_tbl);
 				cvp_put_inst(s);
 			} else {
