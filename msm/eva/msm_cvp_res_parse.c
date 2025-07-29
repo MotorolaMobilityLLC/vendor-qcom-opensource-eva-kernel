@@ -23,7 +23,6 @@ enum clock_properties {
 };
 
 #define PERF_GOV "performance"
-#define LATENCY_DELTA 10
 
 static inline struct device *msm_iommu_get_ctx(const char *ctx_name)
 {
@@ -202,100 +201,6 @@ static int msm_cvp_ipclite_mappings(struct device *dev,
 	dprintk(CVP_CORE, "ipclite reg mappings %#x %#x %#x\n",
 		res->reg_mappings.ipclite_iova, res->reg_mappings.ipclite_size,
 		res->reg_mappings.ipclite_phyaddr);
-
-	return ret;
-}
-
-static int msm_cvp_pmqos_latency(struct device *dev,
-				struct msm_cvp_platform_resources *res)
-{
-	struct device_node *med_core_np;
-	struct device_node *med_cluster_np;
-	struct device_node *apps_pc_np;
-	int ret = 0;
-	u32 entry_latency;
-	u32 exit_latency;
-
-	med_core_np = of_parse_phandle(dev->of_node, "medium_core_pc", 0);
-	if (med_core_np) {
-		ret =  of_property_read_u32(med_core_np, "entry-latency-us", &entry_latency);
-		if (ret) {
-			dprintk(CVP_ERR, "%s: Failed to get entry level latency for medium core\n",
-					__func__);
-			return ret;
-		}
-
-		ret =  of_property_read_u32(med_core_np, "exit-latency-us", &exit_latency);
-		if (ret) {
-			dprintk(CVP_ERR, "%s: Failed to get exit level latency for medium core\n",
-					__func__);
-			return ret;
-		}
-		of_node_put(med_core_np);
-
-		/*Adding LATENCY_DELTA, just to make sure cores really go to LPM*/
-		res->pm_qos.latency_array_us[LATENCY_TOLERANCE_LOW] =
-			entry_latency+exit_latency+LATENCY_DELTA;
-	} else {
-		dprintk(CVP_ERR, "%s: Failed to get medium_core_pc device node\n", __func__);
-		return -EINVAL;
-	}
-
-	med_cluster_np = of_parse_phandle(dev->of_node, "medium_cluster_pc", 0);
-	if (med_cluster_np) {
-		ret =  of_property_read_u32(med_cluster_np, "entry-latency-us", &entry_latency);
-		if (ret) {
-			dprintk(CVP_ERR, "%s: Failed to get entry latency for medium cluster\n",
-					__func__);
-			return ret;
-		}
-
-		ret =  of_property_read_u32(med_cluster_np, "exit-latency-us", &exit_latency);
-		if (ret) {
-			dprintk(CVP_ERR, "%s: Failed to get exit latency for medium cluster\n",
-					__func__);
-			return ret;
-		}
-		of_node_put(med_cluster_np);
-
-		/*Adding LATENCY_DELTA, just to make sure cores really go to LPM*/
-		res->pm_qos.latency_array_us[LATENCY_TOLERANCE_MED] =
-			entry_latency+exit_latency+LATENCY_DELTA;
-	} else {
-		dprintk(CVP_ERR, "%s: Failed to get medium_cluster_pc device node\n", __func__);
-		return -EINVAL;
-	}
-
-	apps_pc_np = of_parse_phandle(dev->of_node, "apps_pc", 0);
-	if (apps_pc_np) {
-		ret =  of_property_read_u32(apps_pc_np, "entry-latency-us", &entry_latency);
-		if (ret) {
-			dprintk(CVP_ERR, "%s: Failed to get entry level latency for full PC\n",
-					__func__);
-			return ret;
-		}
-
-		ret =  of_property_read_u32(apps_pc_np, "exit-latency-us", &exit_latency);
-		if (ret) {
-			dprintk(CVP_ERR, "%s: Failed to get exit level latency for full PC\n",
-					__func__);
-			return ret;
-		}
-		of_node_put(apps_pc_np);
-
-		/*Adding LATENCY_DELTA, just to make sure cores really go to LPM*/
-		res->pm_qos.latency_array_us[LATENCY_TOLERANCE_HIGH] =
-			entry_latency+exit_latency+LATENCY_DELTA;
-	} else {
-		dprintk(CVP_ERR, "%s: Failed to get apps_pc device node\n", __func__);
-		return -EINVAL;
-	}
-
-	dprintk(CVP_CORE, "pmqos latency are %d %d %d %d\n",
-		res->pm_qos.latency_array_us[LATENCY_TOLERANCE_CRITICAL],
-		res->pm_qos.latency_array_us[LATENCY_TOLERANCE_LOW],
-		res->pm_qos.latency_array_us[LATENCY_TOLERANCE_MED],
-		res->pm_qos.latency_array_us[LATENCY_TOLERANCE_HIGH]);
 
 	return ret;
 }
@@ -1058,11 +963,8 @@ int cvp_read_platform_resources_from_drv_data(
 	res->debug_timeout = find_key_value(platform_data,
 			"qcom,debug-timeout");
 
-	for (i = LATENCY_TOLERANCE_CRITICAL; i <= LATENCY_TOLERANCE_HIGH; i++) {
-		res->pm_qos.latency_array_us[i] =
-			platform_data->latency_arr_us[LATENCY_TOLERANCE_CRITICAL];
-	}
-
+	res->pm_qos.latency_us = find_key_value(platform_data,
+			"qcom,pm-qos-latency-us");
 	res->pm_qos.silver_count = 0;
 	for(i = 0; i < MAX_SILVER_CORE_NUM; i++) {
 		if(topology_cluster_id(i) == 0)
@@ -1509,29 +1411,6 @@ int cvp_read_ipclite_mappings_from_dt(struct platform_device *pdev)
 	}
 
 	return msm_cvp_ipclite_mappings(&pdev->dev, &core->resources);
-}
-
-int cvp_read_pmqos_latency_from_dt(struct platform_device *pdev)
-{
-	struct msm_cvp_core *core;
-
-	if (!pdev) {
-		dprintk(CVP_ERR, "Invalid platform device\n");
-		return -EINVAL;
-	} else if (!pdev->dev.parent) {
-		dprintk(CVP_ERR, "Failed to find a parent for %s\n",
-				dev_name(&pdev->dev));
-		return -ENODEV;
-	}
-
-	core = dev_get_drvdata(pdev->dev.parent);
-	if (!core) {
-		dprintk(CVP_ERR, "Failed to find cookie in parent device %s",
-				dev_name(pdev->dev.parent));
-		return -EINVAL;
-	}
-
-	return msm_cvp_pmqos_latency(&pdev->dev, &core->resources);
 }
 
 int cvp_read_mem_cdsp_resources_from_dt(struct platform_device *pdev)

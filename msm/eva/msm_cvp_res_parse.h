@@ -23,7 +23,6 @@ int cvp_read_context_bank_resources_from_dt(struct platform_device *pdev);
 
 int cvp_read_bus_resources_from_dt(struct platform_device *pdev);
 int cvp_read_mem_cdsp_resources_from_dt(struct platform_device *pdev);
-int cvp_read_pmqos_latency_from_dt(struct platform_device *pdev);
 int cvp_read_ipclite_mappings_from_dt(struct platform_device *pdev);
 
 int msm_cvp_load_u32_table(struct platform_device *pdev,

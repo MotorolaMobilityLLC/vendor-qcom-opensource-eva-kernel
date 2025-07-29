@@ -2233,9 +2233,14 @@ static int iris_pm_qos_aggregate(void *device)
 		mutex_lock(&dev->lock);
 		dprintk(CVP_PWR, "%s New aggregated minmum latency %d\n",
 				__func__, min_pm_qos_latency);
-
-		dev->global_pm_qos_latency_us = min_pm_qos_latency;
-		cvp_pm_qos_update(dev, true);
+		/* Put a threshold on user latency so that user can only use the latency
+		 * to acheive power saving. Malicius user must not be allowed to keep the
+		 * apps core away from LPM.
+		 */
+		if (min_pm_qos_latency > core->resources.pm_qos.latency_us) {
+			dev->global_pm_qos_latency_us = min_pm_qos_latency;
+			cvp_pm_qos_update(dev, true);
+		}
 		mutex_unlock(&dev->lock);
 	}
 
