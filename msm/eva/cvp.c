@@ -283,7 +283,6 @@ static const struct of_device_id msm_cvp_plat_match[] = {
 	{.compatible = "qcom,msm-cvp,bus"},
 	{.compatible = "qcom,msm-cvp,mem-cdsp"},
 	{.compatible = "qcom,msm-cvp,ipclite"},
-	{.compatible = "qcom,msm-cvp,pmqos-latency"},
 	{}
 };
 
@@ -455,16 +454,6 @@ static int msm_cvp_probe_ipclite_mappings(struct platform_device *pdev)
 	return cvp_read_ipclite_mappings_from_dt(pdev);
 }
 
-static int msm_cvp_probe_pmqos_latency(struct platform_device *pdev)
-{
-	/* Skip reading DT node for latency during presil */
-	#if defined(USE_PRESIL42) || defined(USE_PRESIL)
-		return 0;
-	#else
-		return cvp_read_pmqos_latency_from_dt(pdev);
-	#endif
-}
-
 static int msm_cvp_probe(struct platform_device *pdev)
 {
 	if (!msm_cvp_probe_allowed)
@@ -488,9 +477,6 @@ static int msm_cvp_probe(struct platform_device *pdev)
 	} else if (of_device_is_compatible(pdev->dev.of_node,
 		"qcom,msm-cvp,ipclite")) {
 		return msm_cvp_probe_ipclite_mappings(pdev);
-	} else if (of_device_is_compatible(pdev->dev.of_node,
-		"qcom,msm-cvp,pmqos-latency")) {
-		return msm_cvp_probe_pmqos_latency(pdev);
 	}
 
 	/* How did we end up here? */

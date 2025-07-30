@@ -149,7 +149,6 @@ struct msm_cvp_platform_data {
 	unsigned int sku_version;
 	uint32_t vpu_ver;
 	unsigned int vm_id;	/* pvm: 1; tvm: 2 */
-	u32 latency_arr_us[LATENCY_TOLERANCE_HIGH+1];
 	struct msm_cvp_ubwc_config_data *ubwc_config;
 	struct msm_cvp_qos_setting *noc_qos;
 	struct msm_cvp_hfi_defs *cvp_hfi;

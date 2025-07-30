@@ -218,7 +218,7 @@ struct msm_cvp_inst *msm_cvp_open(int session_type, struct task_struct *task)
 	inst->clk_data.ddr_bw = 0;
 	inst->clk_data.sys_cache_bw = 0;
 	inst->clk_data.bitrate = 0;
-	inst->pm_qos_latency = core->resources.pm_qos.latency_array_us[LATENCY_TOLERANCE_LOW];
+	inst->pm_qos_latency = core->resources.pm_qos.latency_us;
 
 	for (i = SESSION_MSG_INDEX(SESSION_MSG_START);
 		i <= SESSION_MSG_INDEX(SESSION_MSG_END); i++) {
