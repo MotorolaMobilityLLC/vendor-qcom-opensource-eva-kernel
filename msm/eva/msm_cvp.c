@@ -443,8 +443,15 @@ receive_msg:
 
 	hfi_err = hdr.error_type;
 	if (rc) {
-		dprintk(CVP_ERR, "%s %s: cvp_wait_process_message rc %d\n",
-			current->comm, __func__, rc);
+		dprintk(CVP_ERR, "%s %s: msg timeout rc: %d, sess_id: 0x%x, tran_id: %d",
+			current->comm, __func__, rc,
+			pkt->header.session_id,
+			pkt->header.client_data.data1);
+
+		dprintk(CVP_ERR, "pkt_type: 0x%x, frame_id: %llu, ktid: %llu\n",
+			pkt->header.packet_type, pkt->header.client_data.transaction_id,
+			ktid);
+
 		synx_state = SYNX_STATE_SIGNALED_CANCEL;
 		goto exit;
 	}
