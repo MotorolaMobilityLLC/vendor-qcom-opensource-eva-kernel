@@ -1733,11 +1733,12 @@ fail_get_session_info:
 		list_del(&inst->dsp_list);
 		frpc_node->session_cnt--;
 		/* close dsp inst */
+		mutex_unlock(&frpc_node->dsp_sessions.lock);
 		msm_cvp_close(inst);
 	} else {
+		mutex_unlock(&frpc_node->dsp_sessions.lock);
 		dprintk(CVP_WARN, "Failed DSP session %llx already deleted\n", inst);
 	}
-	mutex_unlock(&frpc_node->dsp_sessions.lock);
 fail_msm_cvp_open:
 	put_task_struct(task);
 fail_pid:
