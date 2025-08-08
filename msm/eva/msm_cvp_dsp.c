@@ -1784,8 +1784,6 @@ void __dsp_cvp_sess_delete(struct cvp_dsp_cmd_msg *cmd)
 			__func__, dsp2cpu_cmd->pid);
 		cmd->ret = -1;
 		goto dsp_fail_delete;
-	} else {
-		cvp_put_fastrpc_node(frpc_node);
 	}
 
 	mutex_lock(&frpc_node->dsp_sessions.lock);
@@ -1817,6 +1815,7 @@ void __dsp_cvp_sess_delete(struct cvp_dsp_cmd_msg *cmd)
 	if (rc) {
 		cmd->ret = -1;
 	}
+	cvp_put_fastrpc_node(frpc_node);
 
 dsp_fail_delete:
 	return;
@@ -2154,9 +2153,9 @@ fail_fastrpc_dev_map_dma:
 fail_allocate_dsp_buf:
 	cvp_kmem_cache_free(&cvp_driver->buf_cache, buf);
 fail_kzalloc_buf:
+	cvp_put_fastrpc_node(frpc_node);
 fail_fastrpc_node:
 	cmd->ret = -1;
-	cvp_put_fastrpc_node(frpc_node);
 	return;
 
 }
