@@ -1203,6 +1203,7 @@ static int iris_hfi_resume(void *dev)
 {
 	int rc = 0;
 	struct iris_hfi_device *device = (struct iris_hfi_device *) dev;
+	CVPKERNEL_ATRACE_BEGIN("__iris_hfi_resume");
 
 	if (!device) {
 		dprintk(CVP_ERR, "%s invalid device\n", __func__);
@@ -1214,7 +1215,7 @@ static int iris_hfi_resume(void *dev)
 	mutex_lock(&device->lock);
 	rc = __resume(device);
 	mutex_unlock(&device->lock);
-
+	CVPKERNEL_ATRACE_END("__iris_hfi_resume");
 	return rc;
 }
 
@@ -1315,6 +1316,8 @@ static int iris_hfi_scale_clocks(void *dev, u32 freq)
 	int rc = 0;
 	struct iris_hfi_device *device = dev;
 
+	CVPKERNEL_ATRACE_BEGIN("__iris_hfi_scale_clocks");
+
 	if (!device) {
 		dprintk(CVP_ERR, "Invalid args: %pK\n", device);
 		return -EINVAL;
@@ -1331,7 +1334,7 @@ static int iris_hfi_scale_clocks(void *dev, u32 freq)
 	rc = msm_cvp_set_clocks_impl(device, freq);
 exit:
 	mutex_unlock(&device->lock);
-
+	CVPKERNEL_ATRACE_END("__iris_hfi_scale_clocks");
 	return rc;
 }
 
@@ -1342,6 +1345,7 @@ static int __iface_cmdq_write_relaxed(struct iris_hfi_device *device,
 	struct cvp_iface_q_info *q_info;
 	struct cvp_hal_cmd_pkt_hdr *cmd_packet;
 	int result = -E2BIG;
+	CVPKERNEL_ATRACE_BEGIN("__iface_cmdq_write_relaxed");
 
 	if (!device || !pkt) {
 		dprintk(CVP_ERR, "Invalid Params\n");
@@ -1400,6 +1404,7 @@ static int __iface_cmdq_write_relaxed(struct iris_hfi_device *device,
 
 err_q_write:
 err_q_null:
+	CVPKERNEL_ATRACE_END("__iface_cmdq_write_relaxed");
 	return result;
 }
 
@@ -2360,6 +2365,7 @@ static int iris_hfi_core_init(void *device)
 	struct cvp_hfi_cmd_sys_init_packet pkt;
 	struct cvp_hfi_cmd_sys_get_property_packet *pversion_pkt;
 	struct iris_hfi_device *dev;
+	CVPKERNEL_ATRACE_BEGIN("iris_hfi_core_init");
 
 	if (!device) {
 		dprintk(CVP_ERR, "Invalid device\n");
@@ -2515,7 +2521,7 @@ pm_qos_bail:
 
 	pm_relax(dev->res->pdev->dev.parent);
 	dprintk(CVP_CORE, "Core inited successfully\n");
-
+	CVPKERNEL_ATRACE_END("iris_hfi_core_init");
 	return 0;
 
 err_init_queues:
@@ -2535,6 +2541,7 @@ err_no_mem:
 	dprintk(CVP_ERR, "Core init failed\n");
 	mutex_unlock(&dev->lock);
 	pm_relax(dev->res->pdev->dev.parent);
+	CVPKERNEL_ATRACE_END("iris_hfi_core_init");
 	return rc;
 }
 
@@ -2761,6 +2768,7 @@ static int iris_hfi_session_init(void *device, void *session_id,
 	struct msm_cvp_core *core;
 	struct msm_cvp_inst *inst;
 	int id = 0;
+	CVPKERNEL_ATRACE_BEGIN("iris_hfi_session_session_init");
 
 	if (!device || !new_session) {
 		dprintk(CVP_ERR, "%s - invalid input\n", __func__);
@@ -2816,6 +2824,7 @@ static int iris_hfi_session_init(void *device, void *session_id,
 		goto err_session_init_fail;
 
 	mutex_unlock(&dev->lock);
+	CVPKERNEL_ATRACE_END("iris_hfi_session_session_init");
 	return 0;
 
 err_session_init_fail:
@@ -2824,6 +2833,7 @@ err_session_init_fail:
 	inst->sess_id = 0;
 	*new_session = NULL;
 	mutex_unlock(&dev->lock);
+	CVPKERNEL_ATRACE_END("iris_hfi_session_session_init");
 	return -EINVAL;
 }
 
@@ -4810,6 +4820,8 @@ static int __iris_power_on(struct iris_hfi_device *device)
 	int rc = 0;
 	u32 reg;
 
+	CVPKERNEL_ATRACE_BEGIN("iris_power_on");
+
 	if (device->power_enabled)
 		return 0;
 
@@ -4892,6 +4904,7 @@ static int __iris_power_on(struct iris_hfi_device *device)
 		CVP_WRAPPER_DEBUG_BRIDGE_LPI_CONTROL, 0x7);
 	pr_info_ratelimited(CVP_PID_TAG "cvp (eva) powered on\n",
 		current->pid, current->tgid, "pwr");
+	CVPKERNEL_ATRACE_END("iris_power_on");
 	return 0;
 
 fail_enable_core:
@@ -4900,6 +4913,7 @@ fail_enable_controller:
 	__unvote_buses(device);
 fail_vote_buses:
 	device->power_enabled = false;
+	CVPKERNEL_ATRACE_END("iris_power_on");
 	return rc;
 }
 
@@ -4962,6 +4976,7 @@ int __resume(struct iris_hfi_device *device)
 {
 	int rc = 0;
 	struct msm_cvp_core *core;
+	CVPKERNEL_ATRACE_BEGIN("__resume");
 
 	if (!device) {
 		dprintk(CVP_ERR, "Invalid params: %pK\n", device);
@@ -5021,6 +5036,7 @@ exit:
 	/* Don't reset skip_pc_count for SYS_PC_PREP cmd */
 	if (device->last_packet_type != HFI_CMD_SYS_PC_PREP)
 		device->skip_pc_count = 0;
+	CVPKERNEL_ATRACE_END("__resume");
 	return rc;
 err_reset_core:
 	__tzbsp_set_cvp_state(TZ_SUBSYS_STATE_SUSPEND);
@@ -5028,13 +5044,14 @@ err_set_cvp_state:
 	power_off_iris2(device);
 err_iris_power_on:
 	dprintk(CVP_ERR, "Failed to resume from power collapse\n");
+	CVPKERNEL_ATRACE_END("__resume");
 	return rc;
 }
 
 static int __power_on_init(struct iris_hfi_device *device)
 {
 	int rc = 0;
-
+	CVPKERNEL_ATRACE_BEGIN("__power_on_init");
 	/* Initialize resources */
 	rc = __init_resources(device, device->res);
 	if (rc) {
@@ -5053,7 +5070,7 @@ static int __power_on_init(struct iris_hfi_device *device)
 		dprintk(CVP_ERR, "Failed to power on iris in in load_fw\n");
 		goto fail_iris_init;
 	}
-
+	CVPKERNEL_ATRACE_END("__power_on_init");
 	return rc;
 fail_iris_init:
 	__deinit_resources(device);
