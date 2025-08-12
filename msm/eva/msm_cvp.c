@@ -238,12 +238,20 @@ static int msm_cvp_session_receive_hfi(struct msm_cvp_inst *inst,
 		u32 pkt_id = 0;
 		u64 aontimer = 0;
 		const char *command_name = "";
+		u32 session_id = 0;
+		u32 stream_idx = 0;
+		u64 transaction_id = 0;
 
+		session_id = msg_hdr->header.session_id;
+		stream_idx = msg_hdr->header.stream_idx;
+		transaction_id = msg_hdr->header.client_data.transaction_id;
 		pkt_id  = msg_hdr->header.packet_type;
 		command_name = get_pkt_name_from_type(pkt_id);
 		aontimer = get_aon_time();
-		dprintk(CVP_PERF, "%s: msg packet %s sent back to umd at aontimer %llu\n",
-			__func__, command_name, aontimer);
+		dprintk(CVP_PERF,
+			"%s: msg packet %s sent back to umd at aontimer %llu session_id 0x%x, stream_idx 0x%x transaction_id 0x%x\n",
+			__func__, command_name, aontimer, session_id,
+			stream_idx, transaction_id);
 	}
 	msm_cvp_msg_tracing_from_sw(msg_hdr, "EVA_KMD_REV_END");
 
