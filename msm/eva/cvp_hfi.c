@@ -1447,12 +1447,20 @@ static int __iface_cmdq_write(struct iris_hfi_device *device, void *pkt)
 		u32 pkt_id = 0;
 		u64 aontimer = 0;
 		const char *command_name = "";
+		u32 session_id = 0;
+		u32 stream_idx = 0;
+		u64 transaction_id = 0;
 
+		session_id = cmd_hdr->header.session_id;
+		stream_idx = cmd_hdr->header.stream_idx;
+		transaction_id = cmd_hdr->header.client_data.transaction_id;
 		pkt_id  = cmd_hdr->header.packet_type;
 		command_name = get_pkt_name_from_type(pkt_id);
 		aontimer = get_aon_time();
-		dprintk(CVP_PERF, "%s: msg packet %s sent to FW at aontimer %llu\n",
-			__func__, command_name, aontimer);
+		dprintk(CVP_PERF,
+			"%s: msg packet %s sent to FW at aontimer %llu session_id 0x%x stream_idx 0x%x transaction_id 0x%x\n",
+			__func__, command_name, aontimer, session_id,
+			stream_idx, transaction_id);
 	}
 
 	msm_cvp_cmd_tracing_from_sw(cmd_hdr, "EVA_KMD_FWD_END");
@@ -3668,12 +3676,20 @@ int __response_handler(struct iris_hfi_device *device)
 			u32 pkt_id = 0;
 			u64 aontimer = 0;
 			const char *command_name = "";
+			u32 session_id = 0;
+			u32 stream_idx = 0;
+			u64 transaction_id = 0;
 
+			session_id = hdr->header.session_id;
+			stream_idx = hdr->header.stream_idx;
+			transaction_id = hdr->header.client_data.transaction_id;
 			pkt_id  = hdr->header.packet_type;
 			command_name = get_pkt_name_from_type(pkt_id);
 			aontimer = get_aon_time();
-			dprintk(CVP_PERF, "%s: msg packet %s received from fw at aontimer %llu\n",
-				__func__, command_name, aontimer);
+			dprintk(CVP_PERF,
+				"%s: msg packet %s received from fw at aontimer %llu session_id 0x%x, stream_idx 0x%x transaction_id 0x%x\n",
+				__func__, command_name, aontimer, session_id,
+				stream_idx, transaction_id);
 		}
 		print_msg_hdr(hdr);
 		rc = cvp_hfi_process_msg_packet(0, raw_packet, info);
