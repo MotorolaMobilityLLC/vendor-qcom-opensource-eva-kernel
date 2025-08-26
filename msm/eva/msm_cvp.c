@@ -1366,7 +1366,7 @@ int msm_cvp_session_flush_stop(struct msm_cvp_inst *inst)
 
 	if (sq->state < QUEUE_START) {
 		dprintk(CVP_WARN, "Session %llx (%#x) not started yet, session state: %d\n",
-			inst, hash32_ptr(inst->session), sq->state);
+			inst, inst->sess_id, sq->state);
 		spin_unlock(&sq->lock);
 		rc = 0;
 		goto stop_thread;
@@ -1520,7 +1520,7 @@ exit:
 	CVPKERNEL_ATRACE_END("msm_cvp_session_stop");
 	pr_info_ratelimited(CVP_PID_TAG "Stop session done for session_id = %#x\n",
 			current->pid, current->tgid, "sess",
-			hash32_ptr(inst->session));
+			inst->sess_id);
 	return rc;
 }
 

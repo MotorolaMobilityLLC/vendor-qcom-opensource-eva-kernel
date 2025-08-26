@@ -1785,7 +1785,7 @@ int cvp_comm_set_arp_buffers(struct msm_cvp_inst *inst)
 
 	if (!session_prop) {
 		dprintk(CVP_WARN, "Incorrect Props in inst %pK sess %x\n",
-			inst, hash32_ptr(inst->session));
+			inst, inst->sess_id);
 		return -EINVAL;
 	}
 
@@ -1793,7 +1793,7 @@ int cvp_comm_set_arp_buffers(struct msm_cvp_inst *inst)
 
 	if ((pkt_concurrency == 0) || (pkt_concurrency > 16)) {
 		dprintk(CVP_WARN, "Incorrect concurrency in inst %pK sess %x: %d\n",
-			inst, hash32_ptr(inst->session), pkt_concurrency);
+			inst, inst->sess_id, pkt_concurrency);
 		return -EINVAL;
 	}
 
