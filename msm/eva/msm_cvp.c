@@ -71,6 +71,7 @@ int msm_cvp_get_session_info(struct msm_cvp_inst *inst, u32 *session)
 	int rc = 0;
 	struct msm_cvp_inst *s;
 	struct msm_cvp_core *core = NULL;
+	CVPKERNEL_ATRACE_BEGIN("msm_cvp_get_session_info");
 
 	if (!inst || !session) {
 		dprintk(CVP_ERR, "%s: invalid params\n", __func__);
@@ -91,6 +92,7 @@ int msm_cvp_get_session_info(struct msm_cvp_inst *inst, u32 *session)
 	dprintk(CVP_SESS, "%s: id 0x%x\n", __func__, *session);
 
 	cvp_put_inst(s);
+	CVPKERNEL_ATRACE_END("msm_cvp_get_session_info");
 	return rc;
 }
 
@@ -1364,7 +1366,7 @@ int msm_cvp_session_flush_stop(struct msm_cvp_inst *inst)
 
 	if (sq->state < QUEUE_START) {
 		dprintk(CVP_WARN, "Session %llx (%#x) not started yet, session state: %d\n",
-			inst, hash32_ptr(inst->session), sq->state);
+			inst, inst->sess_id, sq->state);
 		spin_unlock(&sq->lock);
 		rc = 0;
 		goto stop_thread;
@@ -1518,7 +1520,7 @@ exit:
 	CVPKERNEL_ATRACE_END("msm_cvp_session_stop");
 	pr_info_ratelimited(CVP_PID_TAG "Stop session done for session_id = %#x\n",
 			current->pid, current->tgid, "sess",
-			hash32_ptr(inst->session));
+			inst->sess_id);
 	return rc;
 }
 
@@ -1596,6 +1598,7 @@ static int msm_cvp_get_sysprop(struct msm_cvp_inst *inst,
 	int inst_idx = 0;
 	struct msm_cvp_inst *curr_inst = NULL;
 #endif
+	CVPKERNEL_ATRACE_BEGIN("msm_cvp_get_sysprop");
 
 	if (!inst || !inst->core || !inst->core->dev_ops) {
 		dprintk(CVP_ERR, "%s: invalid params\n", __func__);
@@ -1742,6 +1745,7 @@ static int msm_cvp_get_sysprop(struct msm_cvp_inst *inst,
 			rc = -EFAULT;
 		}
 	}
+	CVPKERNEL_ATRACE_END("msm_cvp_get_sys_prop");
 	return rc;
 }
 

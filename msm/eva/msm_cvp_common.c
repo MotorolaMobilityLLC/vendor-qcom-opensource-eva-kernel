@@ -364,6 +364,8 @@ int wait_for_sess_signal_receipt(struct msm_cvp_inst *inst,
 	int rc = 0;
 	struct cvp_hfi_ops *ops_tbl;
 
+	CVPKERNEL_ATRACE_BEGIN("wait_for_sess_signal_receipt");
+
 	if (!IS_HAL_SESSION_CMD(cmd)) {
 		dprintk(CVP_ERR, "Invalid inst cmd response: %d\n", cmd);
 		return -EINVAL;
@@ -394,6 +396,7 @@ int wait_for_sess_signal_receipt(struct msm_cvp_inst *inst,
 		inst->prev_hfi_error_code = inst->hfi_error_code;
 		inst->hfi_error_code = CVP_ERR_NONE;
 	}
+	CVPKERNEL_ATRACE_END("wait_for_sess_signal_receipt");
 	return rc;
 }
 
@@ -1771,6 +1774,7 @@ int cvp_comm_set_arp_buffers(struct msm_cvp_inst *inst)
 	u32 pkt_concurrency;
 	struct cvp_internal_buf *buf;
 	struct cvp_session_prop *session_prop;
+	CVPKERNEL_ATRACE_BEGIN("cvp_comm_set_arp_buffers");
 
 	if (!inst || !inst->core || !inst->core->dev_ops) {
 		dprintk(CVP_ERR, "%s invalid parameters\n", __func__);
@@ -1781,7 +1785,7 @@ int cvp_comm_set_arp_buffers(struct msm_cvp_inst *inst)
 
 	if (!session_prop) {
 		dprintk(CVP_WARN, "Incorrect Props in inst %pK sess %x\n",
-			inst, hash32_ptr(inst->session));
+			inst, inst->sess_id);
 		return -EINVAL;
 	}
 
@@ -1789,7 +1793,7 @@ int cvp_comm_set_arp_buffers(struct msm_cvp_inst *inst)
 
 	if ((pkt_concurrency == 0) || (pkt_concurrency > 16)) {
 		dprintk(CVP_WARN, "Incorrect concurrency in inst %pK sess %x: %d\n",
-			inst, hash32_ptr(inst->session), pkt_concurrency);
+			inst, inst->sess_id, pkt_concurrency);
 		return -EINVAL;
 	}
 
@@ -1808,12 +1812,13 @@ int cvp_comm_set_arp_buffers(struct msm_cvp_inst *inst)
 		dprintk(CVP_ERR, "set_buffer_done failed %d\n", rc);
 		goto error;
 	}
-
+	CVPKERNEL_ATRACE_END("cvp_comm_set_arp_buffers");
 	return rc;
 
 error:
 	if (rc != -ENOMEM)
 		cvp_release_arp_buffers(inst);
+	CVPKERNEL_ATRACE_END("cvp_comm_set_arp_buffers");
 	return rc;
 }
 
