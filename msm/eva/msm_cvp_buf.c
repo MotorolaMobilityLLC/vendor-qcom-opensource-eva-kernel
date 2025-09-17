@@ -1913,6 +1913,9 @@ int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
 	struct cvp_hfi_persist_buffer_packet *persist_pkt =
 		(struct cvp_hfi_persist_buffer_packet *) in_pkt;
 
+	dprintk(CVP_ERR, "%s: Unsupported request\n", __func__);
+	return -EINVAL;
+
 	if (!offset || !buf_num)
 		return 0;
 
