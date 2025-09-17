@@ -604,9 +604,10 @@ static int hfi_process_session_cvp_msg(u32 device_id,
 	memcpy(&sess_msg->pkt, pkt, get_msg_size(pkt));
 
 	dprintk(CVP_HFI,
-		"%s: Received msg %x cmd_done.status=%d sessionid=%x\n",
+		"%s: Received msg %x cmd_done.status=%d sessionid=%x sq %pK, sq->wq %pK\n",
 		__func__, pkt->header.packet_type,
-		hfi_map_err_status(get_msg_errorcode(pkt)), session_id);
+		hfi_map_err_status(get_msg_errorcode(pkt)), session_id,
+		sq, &sq->wq);
 
 	msm_cvp_msg_tracing_from_sw(pkt, "EVA_KMD_REV_BEGIN");
 
