@@ -254,7 +254,7 @@ struct msm_cvp_inst *msm_cvp_open(int session_type, struct task_struct *task)
 fail_init:
 	kref_put(&inst->kref, close_helper);
 err_invalid_core:
-	return inst;
+	return NULL;
 }
 EXPORT_SYMBOL(msm_cvp_open);
 
