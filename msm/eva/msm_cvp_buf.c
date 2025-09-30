@@ -1636,12 +1636,12 @@ static int msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 			atomic_add(pbuf->size, &inst->persist_usage);
 			print_persist_buffer_info(CVP_MEM, "MAP user persist",
 					pbuf->size, inst, NULL);
-			mutex_unlock(&inst->persistbufs.lock);
 			atomic_inc(&pbuf->smem->refcount);
-			dma_buf_put(dma_buf);
 			dprintk(CVP_MEM,
 				"map persist Reuse fd %d, dma_buf %#llx\n",
 				pbuf->fd, pbuf->smem->dma_buf);
+			mutex_unlock(&inst->persistbufs.lock);
+			dma_buf_put(dma_buf);
 			return 0;
 		}
 	}
@@ -1682,7 +1682,6 @@ static int msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 		inst, NULL);
 	mutex_lock(&inst->persistbufs.lock);
 	list_add_tail(&pbuf->list, &inst->persistbufs.list);
-	mutex_unlock(&inst->persistbufs.lock);
 
 	print_internal_buffer(CVP_MEM, "map persist", inst, pbuf);
 
@@ -1691,6 +1690,7 @@ static int msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 #endif
 
 	*iova = smem->device_addr + buf->offset;
+	mutex_unlock(&inst->persistbufs.lock);
 
 	return 0;
 
