@@ -1504,7 +1504,7 @@ int msm_cvp_comm_try_state(struct msm_cvp_inst *inst, int state)
 
 	dprintk(CVP_SESS,
 	"inst: %pK (%#x) cur_state %s dest_state %s flipped_state = %s\n",
-	inst, hash32_ptr(inst->session), state_names[inst->state],
+	inst, inst->sess_id, state_names[inst->state],
 	state_names[state], state_names[flipped_state]);
 
 	if (cvp_state_handler[flipped_state](inst, state, flipped_state) < 0)
