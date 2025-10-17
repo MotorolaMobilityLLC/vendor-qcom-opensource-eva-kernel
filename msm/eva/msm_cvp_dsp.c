@@ -1212,11 +1212,11 @@ static int eva_fastrpc_driver_register(uint32_t handle)
 		init_completion(&frpc_node->fastrpc_probe_completion);
 
 		mutex_lock(&me->fastrpc_driver_list.lock);
-		list_add_tail(&frpc_node->list, &me->fastrpc_driver_list.list);
 		INIT_MSM_CVP_LIST(&frpc_node->dsp_sessions);
 		INIT_MSM_CVP_LIST(&frpc_node->cvpdspbufs);
 		dprintk(CVP_DSP, "Add frpc node 0x%x to list\n", frpc_node);
 		atomic_inc(&frpc_node->refcount);
+		list_add_tail(&frpc_node->list, &me->fastrpc_driver_list.list);
 		mutex_unlock(&me->fastrpc_driver_list.lock);
 
 		/* register fastrpc device to this session */
