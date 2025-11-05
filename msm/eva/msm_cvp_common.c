@@ -437,8 +437,12 @@ static void handle_session_init_done(enum hal_command_response cmd, void *data)
 	if (!inst) {
 		dprintk(CVP_WARN, "%s:Got a response for an inactive session %#x\n",
 				__func__, response->session_id);
-		list_for_each_entry(inst, &core->instances, list)
-			cvp_print_inst(CVP_WARN, inst);
+		list_for_each_entry(inst, &core->instances, list) {
+			if (kref_get_unless_zero(&inst->kref)) {
+				cvp_print_inst(CVP_WARN, inst);
+				cvp_put_inst(inst);
+			}
+		}
 		return;
 	}
 
@@ -1504,7 +1508,7 @@ int msm_cvp_comm_try_state(struct msm_cvp_inst *inst, int state)
 
 	dprintk(CVP_SESS,
 	"inst: %pK (%#x) cur_state %s dest_state %s flipped_state = %s\n",
-	inst, hash32_ptr(inst->session), state_names[inst->state],
+	inst, inst->sess_id, state_names[inst->state],
 	state_names[state], state_names[flipped_state]);
 
 	if (cvp_state_handler[flipped_state](inst, state, flipped_state) < 0)
