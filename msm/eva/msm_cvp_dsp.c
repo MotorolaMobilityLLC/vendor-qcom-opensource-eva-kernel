@@ -1355,6 +1355,7 @@ static void eva_fastrpc_driver_unregister(uint32_t handle, bool force_exit)
 					msm_cvp_smem_put_dma_buf(smem->dma_buf);
 			} else if (cbuf->ownership == DSP) {
 				int rc = cvp_release_dsp_buffers(cbuf);
+				atomic_sub(smem->size, &frpc_node->dsp_usage);
 
 				if (rc)
 					dprintk(CVP_ERR,
@@ -2000,6 +2001,7 @@ void __dsp_cvp_buf_register(struct cvp_dsp_cmd_msg *cmd)
 	}
 	dprintk(CVP_DSP, "%s register buffer done\n", __func__);
 
+	atomic_add(kmd_buf->size, &frpc_node->dsp_usage);
 	atomic_inc(&frpc_node->smem_count);
 
 	cmd->sbuf.iova = kmd_buf->reserved[0];
@@ -2075,7 +2077,7 @@ void __dsp_cvp_buf_deregister(struct cvp_dsp_cmd_msg *cmd)
 		cmd->ret = -1;
 		goto fail_dsp_buf_dereg;
 	}
-
+	atomic_sub(kmd_buf->size, &frpc_node->dsp_usage);
 	atomic_dec(&frpc_node->smem_count);
 
 	dprintk(CVP_DSP, "%s deregister buffer done\n", __func__);
@@ -2132,6 +2134,7 @@ void __dsp_cvp_mem_alloc(struct cvp_dsp_cmd_msg *cmd)
 	list_add_tail(&buf->list, &frpc_node->cvpdspbufs.list);
 	mutex_unlock(&frpc_node->cvpdspbufs.lock);
 
+	atomic_add(buf->smem->size, &frpc_node->dsp_usage);
 	atomic_inc(&frpc_node->smem_count);
 
 	dprintk(CVP_DSP, "%s allocate buffer done, addr 0x%llx\n",
@@ -2228,6 +2231,7 @@ void __dsp_cvp_mem_free(struct cvp_dsp_cmd_msg *cmd)
 			}
 
 			list_del(&buf->list);
+			atomic_sub(buf->size, &frpc_node->dsp_usage);
 			atomic_dec(&frpc_node->smem_count);
 
 			cvp_kmem_cache_free(&cvp_driver->buf_cache, buf);
