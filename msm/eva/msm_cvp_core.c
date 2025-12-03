@@ -307,7 +307,7 @@ static int msm_cvp_cleanup_instance(struct msm_cvp_inst *inst)
 		return -EINVAL;
 	}
 
-	inst = cvp_get_inst_validate(inst->core, inst);
+	inst = cvp_get_inst(core, inst);
 	if (!inst) {
 		dprintk(CVP_ERR, "%s has a invalid session %llx\n",
 			__func__, inst);
@@ -318,8 +318,10 @@ static int msm_cvp_cleanup_instance(struct msm_cvp_inst *inst)
 	sq = &inst->session_queue;
 
 	rc = msm_cvp_session_flush_stop(inst);
-	if (rc)
+	if (rc == -ECONNRESET)
 		goto exit;
+	if (rc)
+		goto err_timeout;
 
 	max_retries =  inst->core->resources.msm_cvp_hw_rsp_timeout >> 1;
 wait_frame:
@@ -350,7 +352,7 @@ wait_frame:
 exit:
 
 	if (inst) {
-		if (rc == 0) {
+		if (rc == 0 || rc == -ECONNRESET) {
 			if (cvp_release_arp_buffers(inst))
 				dprintk_rl(CVP_WARN,
 					"Failed to release persist buffers\n");
@@ -359,9 +361,11 @@ exit:
 			ops_tbl = inst->core->dev_ops;
 			call_hfi_op(ops_tbl, pm_qos_update, ops_tbl->hfi_device_data);
 		}
-
 		cvp_put_inst(inst);
 	}
+	return 0;
+err_timeout:
+	cvp_put_inst(inst);
 	return rc;
 }
 
