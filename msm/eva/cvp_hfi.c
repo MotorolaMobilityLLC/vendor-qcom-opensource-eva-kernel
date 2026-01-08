@@ -2716,7 +2716,8 @@ static void __session_clean(struct cvp_hal_session *session)
 	device = session->device;
 	core = cvp_driver->cvp_core;
 	inst = (struct msm_cvp_inst *) session->session_id;
-	dprintk(CVP_SESS, "deleted the session: %pK\n", session);
+	dprintk(CVP_SESS, "deleted the session: %pK, inst %pK, sess_id 0x%x\n",
+			session, inst, inst->sess_id);
 	/*
 	 * session might have been removed from the device list in
 	 * core_release, so check and remove if it is in the list
