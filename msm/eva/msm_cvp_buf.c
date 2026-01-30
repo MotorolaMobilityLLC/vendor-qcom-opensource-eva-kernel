@@ -1755,6 +1755,7 @@ static u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
 	frame->bufs[nr].offset = buf->offset;
 
 	print_internal_buffer(CVP_MEM, "map cpu", inst, &frame->bufs[nr]);
+	atomic_add(buf->size, &inst->frame_usage);
 
 	frame->nr++;
 
@@ -1828,6 +1829,7 @@ static void msm_cvp_unmap_frame_buf(struct msm_cvp_inst *inst,
 					buf->smem = NULL;
 				}
 			}
+			atomic_sub(buf->size, &inst->frame_usage);
 	}
 	cvp_kmem_cache_free(&cvp_driver->frame_cache, frame);
 }
@@ -2106,7 +2108,6 @@ int msm_cvp_map_frame(struct msm_cvp_inst *inst,
 			msm_cvp_unmap_frame_buf(inst, frame);
 			return -EINVAL;
 		}
-
 #ifdef USE_PRESIL42
 		presil42_set_buf_fd(buf, iova, "cvp_map_frame");
 #else
