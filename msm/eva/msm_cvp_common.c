@@ -26,6 +26,23 @@
 atomic_t cvp_error_count;
 bool trigger_smmu_fault;
 
+void msm_cvp_bug_on(bool flag, bool isdelay)
+{
+#ifdef USE_PRESIL
+	while (flag)
+		usleep_range(1000, 2000);
+#else
+	if (flag && isdelay) {
+		dprintk(CVP_ERR,
+			"%s: Sleeping for 50ms to get dump from UMD as recovery is disabled\n",
+			__func__);
+		usleep_range(50000, 51000);
+	}
+
+	BUG_ON(flag);
+#endif
+}
+
 static void dump_hfi_queue(struct iris_hfi_device *device)
 {
 	struct cvp_hfi_queue_header *queue;
@@ -607,7 +624,7 @@ void handle_session_error(enum hal_command_response cmd, void *data)
 		wake_up_all(&inst->event_handler.wq);
 	}
 
-	BUG_ON(!msm_cvp_session_error_recovery);
+	msm_cvp_bug_on(!msm_cvp_session_error_recovery, true);
 	cvp_put_inst(inst);
 }
 
@@ -714,7 +731,7 @@ void handle_session_timeout(struct msm_cvp_inst *inst, bool stop_required)
 		&inst->event_handler.lock, flags);
 	wake_up_all(&inst->event_handler.wq);
 
-	BUG_ON(!msm_cvp_session_error_recovery);
+	msm_cvp_bug_on(!msm_cvp_session_error_recovery, true);
 	if (stop_required)
 		msm_cvp_session_flush_stop(inst);
 
@@ -857,7 +874,7 @@ void handle_sys_error(enum hal_command_response cmd, void *data)
 	mutex_unlock(&core->lock);
 
 	dprintk(CVP_WARN, "SYS_ERROR handled.\n");
-	BUG_ON(core->resources.fatal_ssr);
+	msm_cvp_bug_on(core->resources.fatal_ssr, false);
 }
 
 void msm_cvp_comm_session_clean(struct msm_cvp_inst *inst)
@@ -1558,7 +1575,7 @@ int msm_cvp_noc_error_info(struct msm_cvp_core *core)
 		if (msm_cvp_smmu_fault_recovery)
 			core->resources.non_fatal_pagefaults = 1;
 
-		BUG_ON(!core->resources.non_fatal_pagefaults);
+		msm_cvp_bug_on(!core->resources.non_fatal_pagefaults, false);
 	}
 
 	return 0;
